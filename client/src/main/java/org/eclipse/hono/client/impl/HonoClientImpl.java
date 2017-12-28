@@ -51,6 +51,9 @@ import org.eclipse.hono.util.ResourceIdentifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.opentracing.Tracer;
+import io.opentracing.noop.NoopTracerFactory;
+
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -84,6 +87,7 @@ public class HonoClientImpl implements HonoClient {
     private CacheProvider cacheProvider;
     private AtomicInteger reconnectAttempts = new AtomicInteger(0);
     private List<Symbol> offeredCapabilities = Collections.emptyList();
+    private Tracer tracer = NoopTracerFactory.create();
 
     /**
      * Creates a new client for a set of configuration properties.
@@ -178,6 +182,23 @@ public class HonoClientImpl implements HonoClient {
 
     /**
      * Sets the connection used to interact with the Hono server.
+     * Sets the Opentracing {@code Tracer} to use for tracing messages
+     * published by devices across Hono's components.
+     * <p>
+     * If not set explicitly, the {@code NoopTracer} from Opentracing will
+     * be used.
+     * 
+     * @param opentracingTracer The tracer.
+     */
+    public final void setTracer(final Tracer opentracingTracer) {
+        LOG.info("using Opentracing implementation [{}]", opentracingTracer.getClass().getName());
+        this.tracer = Objects.requireNonNull(opentracingTracer);
+    }
+
+    /**
+     * Sets the connection to the Hono server.
+     * <p>
+     * This method is mostly useful to inject a (mock) connection when running tests.
      *
      * @param connection The connection to use.
      */
@@ -441,7 +462,7 @@ public class HonoClientImpl implements HonoClient {
                     onSenderClosed -> {
                         activeSenders.remove(TelemetrySenderImpl.getTargetAddress(tenantId, deviceId));
                     },
-                    result.completer());
+                    result.completer(), tracer);
             return result;
         });
     }
@@ -478,7 +499,7 @@ public class HonoClientImpl implements HonoClient {
                     onSenderClosed -> {
                         activeSenders.remove(EventSenderImpl.getTargetAddress(tenantId, deviceId));
                     },
-                    result.completer());
+                    result.completer(), tracer);
             return result;
         });
     }
@@ -667,6 +688,7 @@ public class HonoClientImpl implements HonoClient {
             CredentialsClientImpl.create(
                     context,
                     clientConfigProperties,
+                    tracer,
                     connection,
                     tenantId,
                     this::removeCredentialsClient,
@@ -745,6 +767,7 @@ public class HonoClientImpl implements HonoClient {
                     context,
                     clientConfigProperties,
                     cacheProvider,
+                    tracer,
                     connection,
                     tenantId,
                     this::removeRegistrationClient,
@@ -807,6 +830,7 @@ public class HonoClientImpl implements HonoClient {
                     context,
                     clientConfigProperties,
                     cacheProvider,
+                    tracer,
                     connection,
                     this::removeTenantClient,
                     this::removeTenantClient,

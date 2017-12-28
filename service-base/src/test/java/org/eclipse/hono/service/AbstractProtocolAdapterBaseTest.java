@@ -14,9 +14,14 @@
 package org.eclipse.hono.service;
 
 import static org.hamcrest.CoreMatchers.is;
-import static org.junit.Assert.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.net.HttpURLConnection;
 
@@ -243,7 +248,7 @@ public class AbstractProtocolAdapterBaseTest {
 
         // GIVEN an adapter connected to a registration service
         final JsonObject assertionResult = newRegistrationAssertionResult("token");
-        when(registrationClient.assertRegistration(eq("device"), any())).thenReturn(Future.succeededFuture(assertionResult));
+        when(registrationClient.assertRegistration(eq("device"), any(), any())).thenReturn(Future.succeededFuture(assertionResult));
 
         // WHEN an assertion for the device is retrieved
         adapter.getRegistrationAssertion("tenant", "device", null).setHandler(ctx.asyncAssertSuccess(result -> {
@@ -262,7 +267,7 @@ public class AbstractProtocolAdapterBaseTest {
     public void testGetRegistrationAssertionFailsWith404ForNonExistingDevice(final TestContext ctx) {
 
         // GIVEN an adapter connected to a registration service
-        when(registrationClient.assertRegistration(eq("non-existent"), any())).thenReturn(
+        when(registrationClient.assertRegistration(eq("non-existent"), any(), any())).thenReturn(
                 Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_NOT_FOUND)));
 
         // WHEN an assertion for a non-existing device is retrieved

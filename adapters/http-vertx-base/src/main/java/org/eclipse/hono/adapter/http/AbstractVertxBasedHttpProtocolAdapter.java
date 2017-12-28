@@ -8,6 +8,7 @@
  *
  * Contributors:
  *    Bosch Software Innovations GmbH - initial creation
+ *    Bosch Software Innovations GmbH - add Open Tracing support
  */
 
 package org.eclipse.hono.adapter.http;
@@ -19,9 +20,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
-import io.vertx.core.Handler;
-import io.vertx.core.http.HttpHeaders;
-import io.vertx.proton.ProtonDelivery;
 import org.apache.qpid.proton.message.Message;
 import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.MessageConsumer;
@@ -30,6 +28,7 @@ import org.eclipse.hono.service.AbstractProtocolAdapterBase;
 import org.eclipse.hono.service.auth.device.Device;
 import org.eclipse.hono.service.command.CommandResponseSender;
 import org.eclipse.hono.service.http.HttpUtils;
+import org.eclipse.hono.service.http.tracing.TracingHandler;
 import org.eclipse.hono.util.Constants;
 import org.eclipse.hono.util.EventConstants;
 import org.eclipse.hono.util.MessageHelper;
@@ -40,15 +39,22 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.noop.NoopTracerFactory;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
+import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerOptions;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.proton.ProtonDelivery;
 
 /**
  * Base class for a Vert.x based Hono protocol adapter that uses the HTTP protocol.
@@ -68,6 +74,12 @@ public abstract class AbstractVertxBasedHttpProtocolAdapter<T extends HttpProtoc
     private static final int AT_LEAST_ONCE = 1;
     private static final int HEADER_QOS_INVALID = -1;
 
+    /**
+     * The <em>Opentracing</em> tracer for tracking processing of requests across
+     * process boundaries.
+     */
+    protected Tracer tracer = NoopTracerFactory.create();
+
     private HttpServer         server;
     private HttpServer         insecureServer;
     private HttpAdapterMetrics metrics;
@@ -80,6 +92,21 @@ public abstract class AbstractVertxBasedHttpProtocolAdapter<T extends HttpProtoc
     @Autowired
     public final void setMetrics(final HttpAdapterMetrics metrics) {
         this.metrics = metrics;
+    }
+
+    /**
+     * Sets the Opentracing {@code Tracer} to use for tracing messages
+     * published by devices across Hono's components.
+     * <p>
+     * If not set explicitly, the {@code NoopTracer} from Opentracing will
+     * be used.
+     * 
+     * @param opentracingTracer The tracer.
+     */
+    @Autowired(required = false)
+    public final void setTracer(final Tracer opentracingTracer) {
+        LOG.info("using Opentracing implementation [{}]", opentracingTracer.getClass().getName());
+        this.tracer = Objects.requireNonNull(opentracingTracer);
     }
 
     /**
@@ -161,6 +188,9 @@ public abstract class AbstractVertxBasedHttpProtocolAdapter<T extends HttpProtoc
                     return Future.failedFuture("no router configured");
                 } else {
                     addRoutes(router);
+                    // add handler for adding an Open Tracing Span to the routing context
+                    final TracingHandler tracingHandler = new TracingHandler(tracer);
+                    router.route().order(-1).handler(tracingHandler).failureHandler(tracingHandler);
                     return CompositeFuture.all(bindSecureHttpServer(router), bindInsecureHttpServer(router));
                 }
             })
@@ -211,7 +241,6 @@ public abstract class AbstractVertxBasedHttpProtocolAdapter<T extends HttpProtoc
         final Router router = Router.router(vertx);
         LOG.info("limiting size of inbound request body to {} bytes", getConfig().getMaxPayloadSize());
         router.route().handler(BodyHandler.create(DEFAULT_UPLOADS_DIRECTORY).setBodyLimit(getConfig().getMaxPayloadSize()));
-
         return router;
     }
 
@@ -502,8 +531,19 @@ public abstract class AbstractVertxBasedHttpProtocolAdapter<T extends HttpProtoc
             } else {
 
                 final Device authenticatedDevice = getAuthenticatedDevice(ctx);
-                final Future<JsonObject> tokenTracker = getRegistrationAssertion(tenant, deviceId, authenticatedDevice);
-                final Future<TenantObject> tenantConfigTracker = getTenantConfiguration(tenant);
+                final SpanContext currentSpan = Optional.ofNullable((Span) ctx.get(TracingHandler.CURRENT_SPAN))
+                        .map(span -> {
+                            span.setOperationName("upload " + endpointName);
+                            span.setTag("tls", ctx.request().isSSL());
+                            return span.context();
+                        }).orElse(null);
+
+                final Future<JsonObject> tokenTracker = getRegistrationAssertion(
+                        tenant,
+                        deviceId,
+                        authenticatedDevice,
+                        currentSpan);
+                final Future<TenantObject> tenantConfigTracker = getTenantConfiguration(tenant, currentSpan);
 
                 // AtomicBoolean to control if the downstream message was sent successfully
                 final AtomicBoolean downstreamMessageSent = new AtomicBoolean(false);
@@ -541,9 +581,9 @@ public abstract class AbstractVertxBasedHttpProtocolAdapter<T extends HttpProtoc
                             closeLinkAndTimerHandlerRef.set(closeLinkAndTimerHandler);
 
                             if (qosHeader == null) {
-                                return sender.send(downstreamMessage);
+                                return sender.send(downstreamMessage, currentSpan);
                             } else {
-                                return sender.sendAndWaitForOutcome(downstreamMessage);
+                                return sender.sendAndWaitForOutcome(downstreamMessage, currentSpan);
                             }
                         });
                     } else {
@@ -573,8 +613,8 @@ public abstract class AbstractVertxBasedHttpProtocolAdapter<T extends HttpProtoc
                                 tenant, deviceId, endpointName, e.getErrorCode(), e.getMessage());
                         ctx.fail(e.getErrorCode());
                     } else {
-                        LOG.debug("cannot process message for device [tenantId: {}, deviceId: {}, endpoint: {}]: {}",
-                                tenant, deviceId, endpointName, t.getMessage());
+                        LOG.debug("cannot process message for device [tenantId: {}, deviceId: {}, endpoint: {}]",
+                                tenant, deviceId, endpointName, t);
                         metrics.incrementUndeliverableHttpMessages(endpointName, tenant);
                         HttpUtils.serviceUnavailable(ctx, 2);
                     }

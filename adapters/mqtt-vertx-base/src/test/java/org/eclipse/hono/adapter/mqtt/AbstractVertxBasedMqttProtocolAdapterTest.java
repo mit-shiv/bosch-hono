@@ -15,8 +15,15 @@ package org.eclipse.hono.adapter.mqtt;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.net.HttpURLConnection;
 import java.util.concurrent.TimeUnit;
@@ -51,6 +58,7 @@ import org.mockito.ArgumentCaptor;
 
 import io.netty.handler.codec.mqtt.MqttConnectReturnCode;
 import io.netty.handler.codec.mqtt.MqttQoS;
+import io.opentracing.SpanContext;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -109,10 +117,10 @@ public class AbstractVertxBasedMqttProtocolAdapterTest {
 
         regClient = mock(RegistrationClient.class);
         final JsonObject result = new JsonObject().put(RegistrationConstants.FIELD_ASSERTION, "token");
-        when(regClient.assertRegistration(anyString(), any())).thenReturn(Future.succeededFuture(result));
+        when(regClient.assertRegistration(anyString(), (String) any(), (SpanContext) any())).thenReturn(Future.succeededFuture(result));
 
         tenantClient = mock(TenantClient.class);
-        when(tenantClient.get(anyString())).thenAnswer(invocation -> {
+        when(tenantClient.get(anyString(), (SpanContext) any())).thenAnswer(invocation -> {
             return Future.succeededFuture(TenantObject.from(invocation.getArgument(0), true));
         });
 
@@ -228,7 +236,7 @@ public class AbstractVertxBasedMqttProtocolAdapterTest {
         myTenantConfig.addAdapterConfiguration(new JsonObject()
                 .put(TenantConstants.FIELD_ADAPTERS_TYPE, ADAPTER_TYPE)
                 .put(TenantConstants.FIELD_ENABLED, false));
-        when(tenantClient.get("my-tenant")).thenReturn(Future.succeededFuture(myTenantConfig));
+        when(tenantClient.get(eq("my-tenant"), (SpanContext) any())).thenReturn(Future.succeededFuture(myTenantConfig));
         final AbstractVertxBasedMqttProtocolAdapter<ProtocolAdapterProperties> adapter = getAdapter(server);
         forceClientMocksToConnected();
 
@@ -356,7 +364,7 @@ public class AbstractVertxBasedMqttProtocolAdapterTest {
         givenAQoS0TelemetrySender();
 
         // WHEN an unknown device publishes a telemetry message
-        when(regClient.assertRegistration(eq("unknown"), any())).thenReturn(
+        when(regClient.assertRegistration(eq("unknown"), any(), any())).thenReturn(
                 Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_NOT_FOUND)));
         final MessageSender sender = mock(MessageSender.class);
         when(messagingClient.getOrCreateTelemetrySender(anyString())).thenReturn(Future.succeededFuture(sender));
@@ -390,7 +398,7 @@ public class AbstractVertxBasedMqttProtocolAdapterTest {
         myTenantConfig.addAdapterConfiguration(new JsonObject()
                 .put(TenantConstants.FIELD_ADAPTERS_TYPE, ADAPTER_TYPE)
                 .put(TenantConstants.FIELD_ENABLED, false));
-        when(tenantClient.get("my-tenant")).thenReturn(Future.succeededFuture(myTenantConfig));
+        when(tenantClient.get(eq("my-tenant"), (SpanContext) any())).thenReturn(Future.succeededFuture(myTenantConfig));
         final AbstractVertxBasedMqttProtocolAdapter<ProtocolAdapterProperties> adapter = getAdapter(server);
         forceClientMocksToConnected();
         final MessageSender sender = mock(MessageSender.class);

@@ -23,6 +23,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Scope;
 
+import io.opentracing.Tracer;
+
 /**
  * Spring Boot configuration for the HTTP adapter.
  */
@@ -31,6 +33,20 @@ public class Config extends AbstractAdapterConfig {
 
     private static final String CONTAINER_ID_HONO_HTTP_ADAPTER = "Hono HTTP Adapter";
     private static final String BEAN_NAME_VERTX_BASED_HTTP_PROTOCOL_ADAPTER = "vertxBasedHttpProtocolAdapter";
+
+    /**
+     * Exposes a <em>Jaeger</em> specific Opentracing {@code Tracer} as a Spring Bean.
+     * <p>
+     * The Tracer will be configured based on the Jaeger specific environment/system properties.
+     * 
+     * @return The tracer.
+     */
+    @Bean
+    @Override
+    public Tracer getTracer() {
+        final io.jaegertracing.Configuration jaegerConfig = io.jaegertracing.Configuration.fromEnv();
+        return jaegerConfig.getTracer();
+    }
 
     /**
      * Creates a new HTTP adapter instance.
@@ -59,6 +75,13 @@ public class Config extends AbstractAdapterConfig {
 
     @Override
     protected void customizeCredentialsServiceClientConfig(final RequestResponseClientConfigProperties props) {
+        if (props.getName() == null) {
+            props.setName(CONTAINER_ID_HONO_HTTP_ADAPTER);
+        }
+    }
+
+    @Override
+    protected void customizeTenantServiceClientConfig(final RequestResponseClientConfigProperties props) {
         if (props.getName() == null) {
             props.setName(CONTAINER_ID_HONO_HTTP_ADAPTER);
         }

@@ -8,7 +8,7 @@
  *
  * Contributors:
  *    Bosch Software Innovations GmbH - initial creation
- *
+ *    Bosch Software Innovations GmbH - add Open Tracing support
  */
 
 package org.eclipse.hono.client.impl;
@@ -36,10 +36,16 @@ import org.eclipse.hono.client.ServerErrorException;
 import org.eclipse.hono.client.ServiceInvocationException;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.util.Constants;
+import org.eclipse.hono.tracing.MessageAnnotationsInjectAdapter;
 import org.eclipse.hono.util.MessageHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.propagation.Format;
+import io.opentracing.tag.Tags;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -49,7 +55,7 @@ import io.vertx.proton.ProtonHelper;
 import io.vertx.proton.ProtonSender;
 
 /**
- * A Vertx-Proton based client for publishing messages to a Hono server.
+ * A Vertx-Proton based client for publishing messages to Hono.
  */
 abstract public class AbstractSender extends AbstractHonoClient implements MessageSender {
 
@@ -87,15 +93,17 @@ abstract public class AbstractSender extends AbstractHonoClient implements Messa
      *           that this sender is used to send downstream.
      * @param targetAddress The target address to send the messages to.
      * @param context The vert.x context to use for sending the messages.
+     * @param tracer The tracer to use.
      */
     protected AbstractSender(
             final ClientConfigProperties config,
             final ProtonSender sender,
             final String tenantId,
             final String targetAddress,
-            final Context context) {
+            final Context context,
+            final Tracer tracer) {
 
-        super(context, config);
+        super(context, config, tracer);
         this.sender = Objects.requireNonNull(sender);
         this.tenantId = Objects.requireNonNull(tenantId);
         this.targetAddress = targetAddress;
@@ -158,7 +166,8 @@ abstract public class AbstractSender extends AbstractHonoClient implements Messa
         if (capacityAvailableHandler == null) {
             final Future<ProtonDelivery> result = Future.future();
             context.runOnContext(send -> {
-                sendMessage(rawMessage).setHandler(result.completer());
+                final Span currentSpan = startSpan(rawMessage);
+                sendMessage(rawMessage, currentSpan).setHandler(result.completer());
             });
             return result;
         } else if (this.drainHandler != null) {
@@ -166,7 +175,8 @@ abstract public class AbstractSender extends AbstractHonoClient implements Messa
         } else if (sender.isOpen()) {
             final Future<ProtonDelivery> result = Future.future();
             context.runOnContext(send -> {
-                sendMessage(rawMessage).setHandler(result.completer());
+                final Span currentSpan = startSpan(rawMessage);
+                sendMessage(rawMessage, currentSpan).setHandler(result.completer());
                 if (sender.sendQueueFull()) {
                     sendQueueDrainHandler(capacityAvailableHandler);
                 } else {
@@ -182,17 +192,33 @@ abstract public class AbstractSender extends AbstractHonoClient implements Messa
     @Override
     public final Future<ProtonDelivery> send(final Message rawMessage) {
 
+        return send(rawMessage, (SpanContext) null);
+    }
+
+    @Override
+    public final Future<ProtonDelivery> send(final Message rawMessage, final SpanContext parent) {
+
         Objects.requireNonNull(rawMessage);
 
         if (!isRegistrationAssertionRequired()) {
             MessageHelper.getAndRemoveRegistrationAssertion(rawMessage);
         }
+
+        final Span span = startSpan(parent, rawMessage);
+        Tags.HTTP_URL.set(span, targetAddress);
+        span.setTag(MessageHelper.APP_PROPERTY_TENANT_ID, tenantId);
+        span.setTag(MessageHelper.APP_PROPERTY_DEVICE_ID, MessageHelper.getDeviceId(rawMessage));
+        tracer.inject(span.context(), Format.Builtin.TEXT_MAP, new MessageAnnotationsInjectAdapter(rawMessage));
+
         final Future<ProtonDelivery> result = Future.future();
         context.runOnContext(send -> {
             if (sender.sendQueueFull()) {
-                result.fail(new ServerErrorException(HttpURLConnection.HTTP_UNAVAILABLE, "no credit available"));
+                ServiceInvocationException e = new ServerErrorException(HttpURLConnection.HTTP_UNAVAILABLE, "no credit available");
+                logError(span, e);
+                span.finish();
+                result.fail(e);
             } else {
-                sendMessage(rawMessage).setHandler(result.completer());
+                sendMessage(rawMessage, span).setHandler(result.completer());
             }
         });
         return result;
@@ -280,6 +306,9 @@ abstract public class AbstractSender extends AbstractHonoClient implements Messa
      * the Hono API this client interacts with.
      * 
      * @param message The message to send.
+     * @param currentSpan The <em>Opentracing</em> span used to trace the sending of the message.
+     *              The span will be finished by this method and will contain an error log if
+     *              the message has not been accepted by the peer.
      * @return A future indicating the outcome of the operation.
      *         <p>
      *         The future will be succeeded if the message has been sent to the endpoint.
@@ -290,9 +319,32 @@ abstract public class AbstractSender extends AbstractHonoClient implements Messa
      *         <p>
      *         The future will be failed with a {@link ServiceInvocationException} if the
      *         message could not be sent.
-     * @throws NullPointerException if the message is {@code null}.
+     * @throws NullPointerException if any of the parameters are {@code null}.
      */
-    protected abstract Future<ProtonDelivery> sendMessage(Message message);
+    protected abstract Future<ProtonDelivery> sendMessage(Message message, Span currentSpan);
+
+    /**
+     * Creates and starts a new OpenTracing {@code Span} for a message to be sent.
+     * 
+     * @param message The message to create the span for.
+     * @return The started span.
+     * @throws NullPointerException if message is {@code null}.
+     */
+    protected final Span startSpan(final Message message) {
+        return startSpan(null, message);
+    }
+
+    /**
+     * Creates and starts a new OpenTracing {@code Span} for a message to be sent
+     * in an existing context.
+     * 
+     * @param context The context to create the span in. If {@code null}, then
+     *                  the span is created without a parent.
+     * @param message The message to create the span for.
+     * @return The started span.
+     * @throws NullPointerException if message is {@code null}.
+     */
+    protected abstract Span startSpan(SpanContext context, Message message);
 
     /**
      * Gets the value of the <em>to</em> property to be used for messages produced by this sender.
@@ -345,6 +397,9 @@ abstract public class AbstractSender extends AbstractHonoClient implements Messa
      * and waits for the outcome of the transfer.
      * 
      * @param message The message to send.
+     * @param currentSpan The <em>Opentracing</em> span used to trace the sending of the message.
+     *              The span will be finished by this method and will contain an error log if
+     *              the message has not been accepted by the peer.
      * @return A future indicating the outcome of the operation.
      *         <p>
      *         The future will succeed if the message has been accepted (and settled)
@@ -354,35 +409,50 @@ abstract public class AbstractSender extends AbstractHonoClient implements Messa
      *         message could not be sent or has not been accepted by the peer.
      * @throws NullPointerException if the message is {@code null}.
      */
-    protected Future<ProtonDelivery> sendMessageAndWaitForOutcome(final Message message) {
+    protected Future<ProtonDelivery> sendMessageAndWaitForOutcome(final Message message, final Span currentSpan) {
 
         Objects.requireNonNull(message);
 
         final Future<ProtonDelivery> result = Future.future();
         final String messageId = String.format("%s-%d", getClass().getSimpleName(), MESSAGE_COUNTER.getAndIncrement());
         message.setMessageId(messageId);
+        currentSpan.setTag(MessageHelper.SYS_PROPERTY_MESSAGE_ID, messageId);
         sender.send(message, deliveryUpdated -> {
+            currentSpan.setTag("remote state", deliveryUpdated.getRemoteState().getClass().getSimpleName());
             if (deliveryUpdated.remotelySettled()) {
                 if (Accepted.class.isInstance(deliveryUpdated.getRemoteState())) {
                     LOG.trace("message [ID: {}] accepted by peer", messageId);
+                    Tags.HTTP_STATUS.set(currentSpan, HttpURLConnection.HTTP_ACCEPTED);
+                    currentSpan.finish();
                     result.complete(deliveryUpdated);
-                } else if (Rejected.class.isInstance(deliveryUpdated.getRemoteState())) {
-                    Rejected rejected = (Rejected) deliveryUpdated.getRemoteState();
-                    if (rejected.getError() == null) {
-                        LOG.debug("message [message ID: {}] rejected by peer", messageId);
-                        result.fail(new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST));
-                    } else {
-                        LOG.debug("message [message ID: {}] rejected by peer: {}, {}", messageId,
-                                rejected.getError().getCondition(), rejected.getError().getDescription());
-                        result.fail(new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST, rejected.getError().getDescription()));
-                    }
                 } else {
-                    LOG.debug("message [message ID: {}] not accepted by peer: {}", messageId, deliveryUpdated.getRemoteState());
-                    result.fail(new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST));
+                    ServiceInvocationException e = null;
+                    if (Rejected.class.isInstance(deliveryUpdated.getRemoteState())) {
+                        Rejected rejected = (Rejected) deliveryUpdated.getRemoteState();
+                        if (rejected.getError() == null) {
+                            LOG.debug("message [message ID: {}] rejected by peer", messageId);
+                            e = new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST);
+                        } else {
+                            LOG.debug("message [message ID: {}] rejected by peer: {}, {}", messageId,
+                                    rejected.getError().getCondition(), rejected.getError().getDescription());
+                            e = new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST, rejected.getError().getDescription());
+                            currentSpan.log(Collections.singletonMap("description", rejected.getError().getDescription()));
+                        }
+                    } else {
+                        LOG.debug("message [message ID: {}] not accepted by peer: {}", messageId, deliveryUpdated.getRemoteState());
+                        e = new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST);
+                    }
+                    logError(currentSpan, e);
+                    currentSpan.finish();
+                    result.fail(e);
                 }
             } else {
                 LOG.warn("peer did not settle message, failing delivery [new remote state: {}]", deliveryUpdated.getRemoteState());
-                result.fail(new ServerErrorException(HttpURLConnection.HTTP_INTERNAL_ERROR));
+                final ServiceInvocationException e = new ServerErrorException(HttpURLConnection.HTTP_INTERNAL_ERROR,
+                        "remote state: " + deliveryUpdated.getRemoteState());
+                logError(currentSpan, e);
+                currentSpan.finish();
+                result.fail(e);
             }
         });
         LOG.trace("sent message [ID: {}], remaining credit: {}, queued messages: {}", messageId, sender.getCredit(), sender.getQueued());

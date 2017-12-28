@@ -13,10 +13,8 @@
 
 package org.eclipse.hono.service.auth.device;
 
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
 
 import java.net.HttpURLConnection;
 import java.util.concurrent.TimeUnit;
@@ -31,6 +29,7 @@ import org.junit.Test;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 
+import io.opentracing.SpanContext;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.unit.TestContext;
@@ -84,7 +83,7 @@ public class CredentialsApiAuthProviderTest {
 
         final ServerErrorException reportedException = new ServerErrorException(503);
         when(credentialsClient.isOpen()).thenReturn(Boolean.TRUE);
-        when(credentialsClient.get(anyString(), anyString())).thenReturn(Future.failedFuture(reportedException));
+        when(credentialsClient.get(anyString(), anyString(), (SpanContext) any())).thenReturn(Future.failedFuture(reportedException));
         provider.authenticate(UsernamePasswordCredentials.create("user@TENANT", "pwd", false), ctx.asyncAssertFailure(t -> {
             ctx.assertEquals(t, reportedException);
         }));

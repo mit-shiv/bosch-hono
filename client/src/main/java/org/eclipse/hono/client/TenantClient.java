@@ -13,11 +13,12 @@
 
 package org.eclipse.hono.client;
 
-import io.vertx.core.Future;
-
 import javax.security.auth.x500.X500Principal;
 
 import org.eclipse.hono.util.TenantObject;
+
+import io.opentracing.SpanContext;
+import io.vertx.core.Future;
 
 /**
  * A client for accessing Hono's Tenant API.
@@ -43,6 +44,25 @@ public interface TenantClient extends RequestResponseClient {
      *         </ul>
      */
     Future<TenantObject> get(String tenantId);
+
+    /**
+     * Gets configuration information for a tenant.
+     *
+     * @param tenantId The id of the tenant to retrieve details for.
+     * @param context The currently active OpenTracing span. An implementation
+     *         should use this as the parent for any span it creates for tracing
+     *         the execution of this operation.
+     * @return A future indicating the result of the operation.
+     *         <ul>
+     *         <li>The future will succeed if a response with status 200 has been received from the
+     *         tenant service. The JSON object will then contain values as defined in
+     *         <a href="https://www.eclipse.org/hono/api/tenant-api/#get-tenant-information">
+     *         Get Tenant Information</a>.</li>
+     *         <li>Otherwise, the future will fail with a {@link ServiceInvocationException} containing
+     *         the (error) status code returned by the service.</li>
+     *         </ul>
+     */
+    Future<TenantObject> get(String tenantId, SpanContext context);
 
     /**
      * Gets tenant configuration information for the <em>subject DN</em>

@@ -19,13 +19,21 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.hono.client.ServiceInvocationException;
+import org.eclipse.hono.service.http.tracing.TracingHandler;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import io.opentracing.Span;
+import io.opentracing.Tracer;
+import io.opentracing.noop.NoopTracerFactory;
+import io.opentracing.tag.Tags;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.http.HttpHeaders;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServerRequest;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.auth.AuthProvider;
 import io.vertx.ext.auth.User;
 import io.vertx.ext.web.RoutingContext;
@@ -53,6 +61,9 @@ public abstract class HonoAuthHandler implements AuthHandler {
     protected final String realm;
     protected final AuthProvider authProvider;
     protected final Set<String> authorities = new HashSet<>();
+    protected final Logger LOG = LoggerFactory.getLogger(getClass());
+
+    private final Tracer tracer;
 
     /**
      * Creates a handler for an authentication provider.
@@ -70,8 +81,22 @@ public abstract class HonoAuthHandler implements AuthHandler {
      * @param realm The security realm name.
      */
     public HonoAuthHandler(final AuthProvider authProvider, final String realm) {
+      this(authProvider, realm, NoopTracerFactory.create());
+    }
+
+    /**
+     * Creates a handler for an authentication provider and a security realm.
+     * 
+     * @param authProvider The provider to use for verifying credentials.
+     * @param realm The security realm name.
+     * @param tracer The Opentracing tracer to use for tracking distributed
+     *               service invocations.
+     */
+    public HonoAuthHandler(final AuthProvider authProvider, final String realm, final Tracer tracer) {
       this.authProvider = authProvider;
       this.realm = realm;
+      LOG.info("using tracer [{}]", tracer.getClass().getName());
+      this.tracer = tracer;
     }
 
     @Override
@@ -164,8 +189,18 @@ public abstract class HonoAuthHandler implements AuthHandler {
         }
 
         // proceed to authN
-        getAuthProvider(ctx).authenticate(res.result(), authN -> {
-          if (authN.succeeded()) {
+        final AuthProvider authProvider = getAuthProvider(ctx);
+        if (authProvider instanceof HonoClientBasedAuthProvider) {
+            ((HonoClientBasedAuthProvider) authProvider).authenticate(res.result(), TracingHandler.serverSpanContext(ctx),
+                    authN -> handleAuthenticationResult(authN, ctx));
+        } else {
+            authProvider.authenticate(res.result(), authN -> handleAuthenticationResult(authN, ctx));
+        }
+      });
+    }
+
+    private void handleAuthenticationResult(final AsyncResult<User> authN, final RoutingContext ctx) {
+        if (authN.succeeded()) {
             User authenticated = authN.result();
             ctx.setUser(authenticated);
             Session session = ctx.session();
@@ -185,8 +220,6 @@ public abstract class HonoAuthHandler implements AuthHandler {
             // to allow further processing if needed
             processException(ctx, authN.cause());
           }
-        });
-      });
     }
 
     /**
@@ -282,5 +315,16 @@ public abstract class HonoAuthHandler implements AuthHandler {
       }
 
       return authProvider;
+    }
+
+    private Span newSpan(final Span parent, final JsonObject authInfo) {
+
+        return tracer.buildSpan("authenticate Device")
+                    .ignoreActiveSpan()
+                    .asChildOf(parent)
+                    .withTag(Tags.COMPONENT.getKey(), getClass().getSimpleName())
+                    .withTag(Tags.SPAN_KIND.getKey(), Tags.SPAN_KIND_CLIENT)
+                    .withTag("auth-info", authInfo.encode())
+                    .start();
     }
 }

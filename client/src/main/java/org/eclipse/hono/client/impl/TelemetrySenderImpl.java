@@ -9,11 +9,14 @@
  * Contributors:
  *    Bosch Software Innovations GmbH - initial creation
  *    Red Hat Inc
+ *    Bosch Software Innovations GmbH - add Open tracing support
  */
 
 package org.eclipse.hono.client.impl;
 
 import java.net.HttpURLConnection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 import org.apache.qpid.proton.amqp.messaging.Accepted;
@@ -23,9 +26,15 @@ import org.eclipse.hono.client.MessageSender;
 import org.eclipse.hono.client.ServerErrorException;
 import org.eclipse.hono.client.ServiceInvocationException;
 import org.eclipse.hono.config.ClientConfigProperties;
+import org.eclipse.hono.tracing.MessageAnnotationsInjectAdapter;
 import org.eclipse.hono.util.MessageHelper;
 import org.eclipse.hono.util.TelemetryConstants;
 
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.propagation.Format;
+import io.opentracing.tag.Tags;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -42,7 +51,12 @@ public final class TelemetrySenderImpl extends AbstractSender {
 
     TelemetrySenderImpl(final ClientConfigProperties config, final ProtonSender sender, final String tenantId,
             final String targetAddress, final Context context) {
-        super(config, sender, tenantId, targetAddress, context);
+        this(config, sender, tenantId, targetAddress, context, null);
+    }
+
+    TelemetrySenderImpl(final ClientConfigProperties config, final ProtonSender sender, final String tenantId,
+            final String targetAddress, final Context context, final Tracer tracer) {
+        super(config, sender, tenantId, targetAddress, context, tracer);
     }
 
     /**
@@ -86,8 +100,9 @@ public final class TelemetrySenderImpl extends AbstractSender {
      * @param closeHook The handler to invoke when the Hono server closes the sender. The sender's
      *                  target address is provided as an argument to the handler.
      * @param creationHandler The handler to invoke with the result of the creation attempt.
+     * @param tracer The <em>Opentracing</em> {@code Tracer} to keep track of the messages sent
+     *               by the sender returned.
      * @throws NullPointerException if any of context, connection, tenant or handler is {@code null}.
-     * @throws IllegalArgumentException if waitForInitialCredits is {@code < 1}.
      */
     public static void create(
             final Context context,
@@ -96,7 +111,8 @@ public final class TelemetrySenderImpl extends AbstractSender {
             final String tenantId,
             final String deviceId,
             final Handler<String> closeHook,
-            final Handler<AsyncResult<MessageSender>> creationHandler) {
+            final Handler<AsyncResult<MessageSender>> creationHandler,
+            final Tracer tracer) {
 
         Objects.requireNonNull(context);
         Objects.requireNonNull(con);
@@ -106,7 +122,7 @@ public final class TelemetrySenderImpl extends AbstractSender {
         final String targetAddress = getTargetAddress(tenantId, deviceId);
         createSender(context, clientConfig, con, targetAddress, ProtonQoS.AT_LEAST_ONCE, closeHook).compose(sender -> {
             return Future.<MessageSender> succeededFuture(
-                    new TelemetrySenderImpl(clientConfig, sender, tenantId, targetAddress, context));
+                    new TelemetrySenderImpl(clientConfig, sender, tenantId, targetAddress, context, tracer));
         }).setHandler(creationHandler);
     }
 
@@ -116,7 +132,22 @@ public final class TelemetrySenderImpl extends AbstractSender {
     @Override
     public Future<ProtonDelivery> sendAndWaitForOutcome(final Message rawMessage) {
 
+        return sendAndWaitForOutcome(rawMessage, null);
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public Future<ProtonDelivery> sendAndWaitForOutcome(final Message rawMessage, final SpanContext parent) {
+
         Objects.requireNonNull(rawMessage);
+
+        final Span span = startSpan(parent, rawMessage);
+        Tags.HTTP_URL.set(span, targetAddress);
+        span.setTag(MessageHelper.APP_PROPERTY_TENANT_ID, tenantId);
+        span.setTag(MessageHelper.APP_PROPERTY_DEVICE_ID, MessageHelper.getDeviceId(rawMessage));
+        tracer.inject(span.context(), Format.Builtin.TEXT_MAP, new MessageAnnotationsInjectAdapter(rawMessage));
 
         if (!isRegistrationAssertionRequired()) {
             MessageHelper.getAndRemoveRegistrationAssertion(rawMessage);
@@ -124,9 +155,12 @@ public final class TelemetrySenderImpl extends AbstractSender {
         final Future<ProtonDelivery> result = Future.future();
         context.runOnContext(send -> {
             if (sender.sendQueueFull()) {
-                result.fail(new ServerErrorException(HttpURLConnection.HTTP_UNAVAILABLE, "no credit available"));
+                ServiceInvocationException e = new ServerErrorException(HttpURLConnection.HTTP_UNAVAILABLE, "no credit available");
+                logError(span, e);
+                span.finish();
+                result.fail(e);
             } else {
-                sendMessageAndWaitForOutcome(rawMessage).setHandler(result.completer());
+                sendMessageAndWaitForOutcome(rawMessage, span).setHandler(result.completer());
             }
         });
         return result;
@@ -136,6 +170,9 @@ public final class TelemetrySenderImpl extends AbstractSender {
      * Sends an AMQP 1.0 message to the peer this client is configured for.
      * 
      * @param message The message to send.
+     * @param currentSpan The <em>Opentracing</em> span used to trace the sending of the message.
+     *              The span will be finished by this method and will contain an error log if
+     *              the message has not been accepted by the peer.
      * @return A future indicating the outcome of the operation.
      *         <p>
      *         The future will succeed if the message has been sent to the peer.
@@ -145,36 +182,61 @@ public final class TelemetrySenderImpl extends AbstractSender {
      *         <p>
      *         The future will be failed with a {@link ServiceInvocationException} if the
      *         message could not be sent.
-     * @throws NullPointerException if the message is {@code null}.
+     * @throws NullPointerException if any of the parameters are {@code null}.
      */
     @Override
-    protected Future<ProtonDelivery> sendMessage(final Message message) {
+    protected Future<ProtonDelivery> sendMessage(final Message message, final Span currentSpan) {
 
         Objects.requireNonNull(message);
+        Objects.requireNonNull(currentSpan);
 
         final String messageId = String.format("%s-%d", getClass().getSimpleName(), MESSAGE_COUNTER.getAndIncrement());
         message.setMessageId(messageId);
+        currentSpan.setTag(MessageHelper.SYS_PROPERTY_MESSAGE_ID, messageId);
         final ProtonDelivery result = sender.send(message, deliveryUpdated -> {
+            currentSpan.setTag("remote state", deliveryUpdated.getRemoteState().getClass().getSimpleName());
             if (deliveryUpdated.remotelySettled()) {
                 if (Accepted.class.isInstance(deliveryUpdated.getRemoteState())) {
                     LOG.trace("message [message ID: {}] accepted by peer", messageId);
-                } else if (Rejected.class.isInstance(deliveryUpdated.getRemoteState())) {
-                    Rejected remoteState = (Rejected) deliveryUpdated.getRemoteState();
-                    if (remoteState.getError() == null) {
-                        LOG.debug("message [message ID: {}] rejected by peer", messageId);
-                    } else {
-                        LOG.debug("message [message ID: {}] rejected by peer: {}, {}", messageId,
-                                remoteState.getError().getCondition(), remoteState.getError().getDescription());
-                    }
+                    Tags.HTTP_STATUS.set(currentSpan, HttpURLConnection.HTTP_ACCEPTED);
                 } else {
-                    LOG.debug("message [message ID: {}] not accepted by peer: {}", messageId, deliveryUpdated.getRemoteState());
+                    final Map<String, Object> events = new HashMap<>();
+                    if (Rejected.class.isInstance(deliveryUpdated.getRemoteState())) {
+                        Rejected remoteState = (Rejected) deliveryUpdated.getRemoteState();
+                        Tags.HTTP_STATUS.set(currentSpan, HttpURLConnection.HTTP_BAD_REQUEST);
+                        if (remoteState.getError() == null) {
+                            LOG.debug("message [message ID: {}] rejected by peer", messageId);
+                        } else {
+                            LOG.debug("message [message ID: {}] rejected by peer: {}, {}", messageId,
+                                    remoteState.getError().getCondition(), remoteState.getError().getDescription());
+                            events.put("description", remoteState.getError().getDescription());
+                        }
+                    } else {
+                        LOG.debug("message [message ID: {}] not accepted by peer: {}", messageId, deliveryUpdated.getRemoteState());
+                        Tags.HTTP_STATUS.set(currentSpan, HttpURLConnection.HTTP_UNAVAILABLE);
+                    }
+                    logError(currentSpan, events);
                 }
             } else {
                 LOG.warn("peer did not settle message [message ID: {}, remote state: {}]", messageId, deliveryUpdated.getRemoteState());
+                currentSpan.log("peer did not settle message");
             }
+            currentSpan.finish();
         });
         LOG.trace("sent message [ID: {}], remaining credit: {}, queued messages: {}", messageId, sender.getCredit(), sender.getQueued());
 
         return Future.succeededFuture(result);
+    }
+
+    @Override
+    protected Span startSpan(final SpanContext parent, final Message rawMessage) {
+
+        if (tracer == null) {
+            throw new IllegalStateException("no tracer configured");
+        } else {
+            final Span span = newChildSpan(parent, "upload Telemetry Data");
+            Tags.SPAN_KIND.set(span, Tags.SPAN_KIND_CLIENT);
+            return span;
+        }
     }
 }

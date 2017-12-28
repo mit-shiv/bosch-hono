@@ -457,6 +457,7 @@ Test cases are run against Docker images of Hono server + (Apache Qpid Dispatch 
                       <SPRING_CONFIG_LOCATION>file:/etc/hono/</SPRING_CONFIG_LOCATION>
                       <!--<PN_TRACE_FRM>1</PN_TRACE_FRM>-->
                       <SPRING_PROFILES_ACTIVE>prod</SPRING_PROFILES_ACTIVE>
+                      <JAEGER_SERVICE_NAME>HTTP Adapter</JAEGER_SERVICE_NAME>
                     </env>
                     <log>
                       <prefix>HTTP</prefix>

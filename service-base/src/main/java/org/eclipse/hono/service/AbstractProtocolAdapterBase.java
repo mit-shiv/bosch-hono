@@ -9,6 +9,7 @@
  * Contributors:
  *    Bosch Software Innovations GmbH - initial creation
  *    Red Hat Inc
+ *    Bosch Software Innovations GmbH - add Open Tracing support
  */
 package org.eclipse.hono.service;
 
@@ -17,7 +18,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiConsumer;
 
-import io.vertx.proton.ProtonDelivery;
 import org.apache.qpid.proton.amqp.Binary;
 import org.apache.qpid.proton.amqp.messaging.Data;
 import org.apache.qpid.proton.message.Message;
@@ -42,12 +42,13 @@ import org.eclipse.hono.util.EventConstants;
 import org.eclipse.hono.util.MessageHelper;
 import org.eclipse.hono.util.RegistrationConstants;
 import org.eclipse.hono.util.ResourceIdentifier;
-import org.eclipse.hono.util.TenantConstants;
 import org.eclipse.hono.util.Strings;
+import org.eclipse.hono.util.TenantConstants;
 import org.eclipse.hono.util.TenantObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 
+import io.opentracing.SpanContext;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -57,6 +58,7 @@ import io.vertx.core.net.TrustOptions;
 import io.vertx.ext.healthchecks.HealthCheckHandler;
 import io.vertx.ext.healthchecks.Status;
 import io.vertx.proton.ProtonConnection;
+import io.vertx.proton.ProtonDelivery;
 import io.vertx.proton.ProtonHelper;
 
 /**
@@ -585,6 +587,36 @@ public abstract class AbstractProtocolAdapterBase<T extends ProtocolAdapterPrope
      */
     protected final Future<JsonObject> getRegistrationAssertion(final String tenantId, final String deviceId,
             final Device authenticatedDevice) {
+        return getRegistrationAssertion(tenantId, deviceId, authenticatedDevice, null);
+    }
+
+    /**
+     * Gets an assertion for a device's registration status.
+     * <p>
+     * The returned JSON object contains the assertion for the device
+     * under property {@link RegistrationConstants#FIELD_ASSERTION}.
+     * <p>
+     * In addition to the assertion the returned object may include <em>default</em>
+     * values for properties to set on messages published by the device under
+     * property {@link RegistrationConstants#FIELD_DEFAULTS}.
+     * 
+     * @param tenantId The tenant that the device belongs to.
+     * @param deviceId The device to get the assertion for.
+     * @param authenticatedDevice The device that has authenticated to this protocol adapter.
+     *            <p>
+     *            If not {@code null} then the authenticated device is compared to the given tenant and device ID. If
+     *            they differ in the device identifier, then the authenticated device is considered to be a gateway
+     *            acting on behalf of the device.
+     * @param context The currently active OpenTracing span that is used to
+     *                trace the retrieval of the assertion.
+     * @return The assertion.
+     * @throws NullPointerException if any of tenant or device ID are {@code null}.
+     */
+    protected final Future<JsonObject> getRegistrationAssertion(
+            final String tenantId,
+            final String deviceId,
+            final Device authenticatedDevice,
+            final SpanContext context) {
 
         Objects.requireNonNull(tenantId);
         Objects.requireNonNull(deviceId);
@@ -593,7 +625,7 @@ public abstract class AbstractProtocolAdapterBase<T extends ProtocolAdapterPrope
 
         return gatewayId
                 .compose(gwId -> getRegistrationClient(tenantId))
-                .compose(client -> client.assertRegistration(deviceId, gatewayId.result()));
+                .compose(client -> client.assertRegistration(deviceId, gatewayId.result(), context));
     }
 
     private Future<String> getGatewayId(final String tenantId, final String deviceId,
@@ -631,10 +663,31 @@ public abstract class AbstractProtocolAdapterBase<T extends ProtocolAdapterPrope
      * @throws NullPointerException if tenant ID is {@code null}.
      */
     protected final Future<TenantObject> getTenantConfiguration(final String tenantId) {
+        return getTenantConfiguration(tenantId, null);
+    }
+
+    /**
+     * Gets configuration information for a tenant.
+     * <p>
+     * The returned JSON object contains information as defined by Hono's
+     * <a href="https://www.eclipse.org/hono/api/tenant-api/#response-payload">Tenant API</a>.
+     * 
+     * @param tenantId The tenant to retrieve information for.
+     * @param context The currently active OpenTracing span that is used to
+     *                trace the retrieval of the tenant configuration.
+     * @return A future indicating the outcome of the operation.
+     *         <p>
+     *         The future will fail if the information cannot be retrieved. The cause will be a
+     *         {@link ServiceInvocationException} containing a corresponding error code.
+     *         <p>
+     *         Otherwise the future will contain the configuration information.
+     * @throws NullPointerException if tenant ID is {@code null}.
+     */
+    protected final Future<TenantObject> getTenantConfiguration(final String tenantId, final SpanContext context) {
 
         Objects.requireNonNull(tenantId);
 
-        return getTenantClient().compose(client -> client.get(tenantId));
+        return getTenantClient().compose(client -> client.get(tenantId, context));
     }
 
     /**

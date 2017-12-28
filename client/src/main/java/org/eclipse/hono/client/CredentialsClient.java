@@ -16,6 +16,7 @@ package org.eclipse.hono.client;
 import io.vertx.core.json.JsonObject;
 import org.eclipse.hono.util.CredentialsObject;
 
+import io.opentracing.SpanContext;
 import io.vertx.core.Future;
 
 /**
@@ -48,6 +49,28 @@ public interface CredentialsClient extends RequestResponseClient {
      * @see RequestResponseClient#setRequestTimeout(long)
      */
     Future<CredentialsObject> get(String type, String authId);
+
+    /**
+     * Gets credentials for a device by type and authentication identifier.
+     *
+     * @param type The type of credentials to retrieve.
+     * @param authId The authentication identifier used in the credentials to retrieve.
+     * @param context The currently active OpenTracing span. An implementation
+     *         should use this as the parent for any span it creates for tracing
+     *         the execution of this operation.
+     * @return A future indicating the result of the operation.
+     *         <p>
+     *         The future will succeed if a response with status 200 has been received from the
+     *         credentials service. The JSON object will then contain values as defined in
+     *         <a href="https://www.eclipse.org/hono/api/credentials-api/#get-credentials">
+     *         Get Credentials</a>.
+     *         <p>
+     *         Otherwise, the future will fail with a {@link ServiceInvocationException} containing
+     *         the (error) status code returned by the service.
+     * @throws NullPointerException if any of type or authentication ID are {@code null}.
+     * @see RequestResponseClient#setRequestTimeout(long)
+     */
+    Future<CredentialsObject> get(String type, String authId, SpanContext context);
 
     /**
      * Gets credentials for a device by type and authentication identifier.

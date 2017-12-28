@@ -12,8 +12,14 @@
 
 package org.eclipse.hono.adapter.http;
 
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.net.HttpURLConnection;
 
@@ -24,6 +30,7 @@ import org.eclipse.hono.client.MessageSender;
 import org.eclipse.hono.client.RegistrationClient;
 import org.eclipse.hono.client.TenantClient;
 import org.eclipse.hono.service.command.CommandConnection;
+import org.eclipse.hono.service.http.tracing.TracingHandler;
 import org.eclipse.hono.util.RegistrationConstants;
 import org.eclipse.hono.util.TenantConstants;
 import org.eclipse.hono.util.TenantObject;
@@ -33,6 +40,8 @@ import org.junit.Test;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -84,10 +93,10 @@ public class AbstractVertxBasedHttpProtocolAdapterTest {
 
         regClient = mock(RegistrationClient.class);
         final JsonObject result = new JsonObject().put(RegistrationConstants.FIELD_ASSERTION, "token");
-        when(regClient.assertRegistration(anyString(), any())).thenReturn(Future.succeededFuture(result));
+        when(regClient.assertRegistration(anyString(), any(), (SpanContext) any())).thenReturn(Future.succeededFuture(result));
 
         tenantClient = mock(TenantClient.class);
-        when(tenantClient.get(anyString())).thenAnswer(invocation -> {
+        when(tenantClient.get(anyString(), (SpanContext) any())).thenAnswer(invocation -> {
             return Future.succeededFuture(TenantObject.from(invocation.getArgument(0), true));
         });
 
@@ -202,7 +211,7 @@ public class AbstractVertxBasedHttpProtocolAdapterTest {
         myTenantConfig.addAdapterConfiguration(new JsonObject()
                 .put(TenantConstants.FIELD_ADAPTERS_TYPE, ADAPTER_TYPE)
                 .put(TenantConstants.FIELD_ENABLED, false));
-        when(tenantClient.get("my-tenant")).thenReturn(Future.succeededFuture(myTenantConfig));
+        when(tenantClient.get(eq("my-tenant"), any())).thenReturn(Future.succeededFuture(myTenantConfig));
         final AbstractVertxBasedHttpProtocolAdapter<HttpProtocolAdapterProperties> adapter = getAdapter(server, null);
 
         // WHEN a device that belongs to "my-tenant" publishes a telemetry message
@@ -304,12 +313,14 @@ public class AbstractVertxBasedHttpProtocolAdapterTest {
 
     private static RoutingContext newRoutingContext(final Buffer payload, final HttpServerResponse response) {
 
+        final Span span = mock(Span.class);
         final HttpServerRequest request = mock(HttpServerRequest.class);
         final RoutingContext ctx = mock(RoutingContext.class);
+        when(response.setStatusCode(anyInt())).thenReturn(response);
         when(ctx.getBody()).thenReturn(payload);
         when(ctx.response()).thenReturn(response);
         when(ctx.request()).thenReturn(request);
-        when(response.setStatusCode(anyInt())).thenReturn(response);
+        when(ctx.get(TracingHandler.CURRENT_SPAN)).thenReturn(span);
         return ctx;
     }
 
@@ -376,7 +387,7 @@ public class AbstractVertxBasedHttpProtocolAdapterTest {
     private void givenAnEventSenderForOutcome(final Future<ProtonDelivery> outcome) {
 
         final MessageSender sender = mock(MessageSender.class);
-        when(sender.send(any(Message.class))).thenReturn(outcome);
+        when(sender.send(any(Message.class), (SpanContext) any())).thenReturn(outcome);
 
         when(messagingClient.getOrCreateEventSender(anyString())).thenReturn(Future.succeededFuture(sender));
     }
@@ -384,7 +395,7 @@ public class AbstractVertxBasedHttpProtocolAdapterTest {
     private void givenATelemetrySenderForOutcome(final Future<ProtonDelivery> outcome) {
 
         final MessageSender sender = mock(MessageSender.class);
-        when(sender.send(any(Message.class))).thenReturn(outcome);
+        when(sender.send(any(Message.class), (SpanContext) any())).thenReturn(outcome);
 
         when(messagingClient.getOrCreateTelemetrySender(anyString())).thenReturn(Future.succeededFuture(sender));
     }

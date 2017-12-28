@@ -30,6 +30,10 @@ import org.slf4j.LoggerFactory;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import io.opentracing.Span;
+import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.tag.Tags;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Context;
 import io.vertx.core.Future;
@@ -54,7 +58,11 @@ public class CredentialsClientImpl extends AbstractRequestResponseClient<Credent
      * @param tenantId The identifier of the tenant for which the client should be created.
      */
     protected CredentialsClientImpl(final Context context, final ClientConfigProperties config, final String tenantId) {
-        super(context, config, tenantId);
+        this(context, config, null, tenantId);
+    }
+
+    private CredentialsClientImpl(final Context context, final ClientConfigProperties config, final Tracer tracer, final String tenantId) {
+        super(context, config, tracer, tenantId);
     }
 
     @Override
@@ -100,16 +108,19 @@ public class CredentialsClientImpl extends AbstractRequestResponseClient<Credent
      *
      * @param context The vert.x context to run all interactions with the server on.
      * @param clientConfig The configuration properties to use.
+     * @param tracer The tracer to use for tracking request processing
+     *               across process boundaries.
      * @param con The AMQP connection to the server.
      * @param tenantId The tenant for which credentials are handled.
      * @param senderCloseHook A handler to invoke if the peer closes the sender link unexpectedly.
      * @param receiverCloseHook A handler to invoke if the peer closes the receiver link unexpectedly.
      * @param creationHandler The handler to invoke with the outcome of the creation attempt.
-     * @throws NullPointerException if any of the parameters is {@code null}.
+     * @throws NullPointerException if any of the parameters other than tracer is {@code null}.
      */
     public static final void create(
             final Context context,
             final ClientConfigProperties clientConfig,
+            final Tracer tracer,
             final ProtonConnection con,
             final String tenantId,
             final Handler<String> senderCloseHook,
@@ -117,7 +128,7 @@ public class CredentialsClientImpl extends AbstractRequestResponseClient<Credent
             final Handler<AsyncResult<CredentialsClient>> creationHandler) {
 
         LOG.debug("creating new credentials client for [{}]", tenantId);
-        final CredentialsClientImpl client = new CredentialsClientImpl(context, clientConfig, tenantId);
+        final CredentialsClientImpl client = new CredentialsClientImpl(context, clientConfig, tracer, tenantId);
         client.createLinks(con, senderCloseHook, receiverCloseHook).setHandler(s -> {
             if (s.succeeded()) {
                 LOG.debug("successfully created credentials client for [{}]", tenantId);
@@ -136,7 +147,17 @@ public class CredentialsClientImpl extends AbstractRequestResponseClient<Credent
      */
     @Override
     public Future<CredentialsObject> get(final String type, final String authId) {
-        return get(type, authId, new JsonObject());
+        return get(type, authId, (SpanContext) null);
+    }
+
+    /**
+     * Invokes the <em>Get Credentials</em> operation of Hono's
+     * <a href="https://www.eclipse.org/hono/api/Credentials-API">Credentials API</a>
+     * on the service represented by the <em>sender</em> and <em>receiver</em> links.
+     */
+    @Override
+    public Future<CredentialsObject> get(final String type, final String authId, final SpanContext parent) {
+        return get(type, authId, parent, new JsonObject());
     }
 
     /**
@@ -147,17 +168,32 @@ public class CredentialsClientImpl extends AbstractRequestResponseClient<Credent
     @Override
     public final Future<CredentialsObject> get(final String type, final String authId, final JsonObject clientContext) {
 
+        return get(type, authId, null, clientContext);
+    }
+
+    private Future<CredentialsObject> get(
+            final String type,
+            final String authId,
+            final SpanContext parent,
+            final JsonObject clientContext) {
+
         Objects.requireNonNull(type);
         Objects.requireNonNull(authId);
+        Objects.requireNonNull(clientContext);
 
         final Future<CredentialsResult<CredentialsObject>> responseTracker = Future.future();
         final JsonObject specification = new JsonObject()
                 .put(CredentialsConstants.FIELD_TYPE, type)
                 .put(CredentialsConstants.FIELD_AUTH_ID, authId)
                 .mergeIn(clientContext);
+        final Span span = newChildSpan(parent, "get Credentials");
+        span.setTag(CredentialsConstants.FIELD_TYPE, type);
+        span.setTag(CredentialsConstants.FIELD_AUTH_ID, authId);
 
-        createAndSendRequest(CredentialsConstants.CredentialsAction.get.toString(), specification.toBuffer(), responseTracker.completer());
+        createAndSendRequest(CredentialsConstants.CredentialsAction.get.toString(), specification.toBuffer(), responseTracker.completer(), span);
         return responseTracker.map(response -> {
+            Tags.HTTP_STATUS.set(span, response.getStatus());
+            span.finish();
             switch(response.getStatus()) {
             case HttpURLConnection.HTTP_OK:
                 return response.getPayload();

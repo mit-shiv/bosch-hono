@@ -21,7 +21,6 @@ import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.service.cache.SpringCacheProvider;
 import org.eclipse.hono.service.command.CommandConnection;
 import org.eclipse.hono.service.command.CommandConnectionImpl;
-import org.eclipse.hono.service.metric.MetricConfig;
 import org.eclipse.hono.util.CommandConstants;
 import org.eclipse.hono.util.Constants;
 import org.eclipse.hono.util.CredentialsConstants;
@@ -36,6 +35,8 @@ import org.springframework.context.annotation.Scope;
 
 import com.google.common.cache.CacheBuilder;
 
+import io.opentracing.Tracer;
+import io.opentracing.noop.NoopTracerFactory;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.dns.AddressResolverOptions;
@@ -49,10 +50,22 @@ public abstract class AbstractAdapterConfig {
     private MetricsOptions metricsOptions;
 
     /**
+     * Exposes an Opentracing {@code Tracer} as a Spring Bean.
+     * <p>
+     * This default implementation returns the Noop Tracer.
+     * 
+     * @return The tracer.
+     */
+    @Bean
+    public Tracer getTracer() {
+        return NoopTracerFactory.create();
+    }
+
+    /**
      * Vert.x metrics options, if configured.
      *
      * @param metricsOptions Vert.x metrics options
-     * @see MetricConfig
+     * @see MetricsOptions
      */
     @Autowired(required = false)
     public void setMetricsOptions(final MetricsOptions metricsOptions) {
@@ -119,7 +132,9 @@ public abstract class AbstractAdapterConfig {
     @Bean
     @Scope("prototype")
     public HonoClient messagingClient() {
-        return new HonoClientImpl(vertx(), messagingClientConfig());
+        final HonoClientImpl result = new HonoClientImpl(vertx(), messagingClientConfig());
+        result.setTracer(getTracer());
+        return result;
     }
 
     /**
@@ -167,7 +182,7 @@ public abstract class AbstractAdapterConfig {
         if (cacheProvider != null) {
             result.setCacheProvider(cacheProvider);
         }
-
+        result.setTracer(getTracer());
         return result;
     }
 
@@ -219,7 +234,9 @@ public abstract class AbstractAdapterConfig {
     @Qualifier(CredentialsConstants.CREDENTIALS_ENDPOINT)
     @Scope("prototype")
     public HonoClient credentialsServiceClient() {
-        return new HonoClientImpl(vertx(), credentialsServiceClientConfig());
+        final HonoClientImpl result = new HonoClientImpl(vertx(), credentialsServiceClientConfig());
+        result.setTracer(getTracer());
+        return result;
     }
 
     /**
@@ -265,7 +282,7 @@ public abstract class AbstractAdapterConfig {
         if (cacheProvider != null) {
             result.setCacheProvider(cacheProvider);
         }
-
+        result.setTracer(getTracer());
         return result;
     }
 
@@ -301,7 +318,9 @@ public abstract class AbstractAdapterConfig {
     @Bean
     @Scope("prototype")
     public CommandConnection commandConnection() {
-        return new CommandConnectionImpl(vertx(), commandConnectionClientConfig());
+        final CommandConnectionImpl result = new CommandConnectionImpl(vertx(), commandConnectionClientConfig());
+        result.setTracer(getTracer());
+        return result;
     }
 
     /**

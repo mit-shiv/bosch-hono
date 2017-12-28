@@ -24,6 +24,7 @@ import org.eclipse.hono.util.CredentialsObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.opentracing.SpanContext;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -72,18 +73,21 @@ public abstract class CredentialsApiAuthProvider implements HonoClientBasedAuthP
      * Retrieves credentials from the Credentials service.
      * 
      * @param deviceCredentials The credentials provided by the device.
+     * @param currentSpan The OpenTracing span providing the context for this execution.
      * @return A future containing the credentials on record as retrieved from
      *         Hono's <em>Credentials</em> API.
      * @throws NullPointerException if device credentials is {@code null}.
      */
-    protected final Future<CredentialsObject> getCredentialsForDevice(final DeviceCredentials deviceCredentials) {
+    protected final Future<CredentialsObject> getCredentialsForDevice(
+            final DeviceCredentials deviceCredentials,
+            final SpanContext currentSpan) {
 
         Objects.requireNonNull(deviceCredentials);
         if (credentialsServiceClient == null) {
             return Future.failedFuture(new IllegalStateException("Credentials API client is not set"));
         } else {
             return getCredentialsClient(deviceCredentials.getTenantId()).compose(client ->
-                client.get(deviceCredentials.getType(), deviceCredentials.getAuthId()));
+                client.get(deviceCredentials.getType(), deviceCredentials.getAuthId(), currentSpan));
         }
     }
 
@@ -92,12 +96,21 @@ public abstract class CredentialsApiAuthProvider implements HonoClientBasedAuthP
             final DeviceCredentials deviceCredentials,
             final Handler<AsyncResult<Device>> resultHandler) {
 
+        authenticate(deviceCredentials, null, resultHandler);
+    }
+
+    @Override
+    public final void authenticate(
+            final DeviceCredentials deviceCredentials,
+            final SpanContext currentSpan,
+            final Handler<AsyncResult<Device>> resultHandler) {
+
         Objects.requireNonNull(deviceCredentials);
         Objects.requireNonNull(resultHandler);
         Future<Device> validationResult = Future.future();
         validationResult.setHandler(resultHandler);
 
-        getCredentialsForDevice(deviceCredentials).recover(t -> {
+        getCredentialsForDevice(deviceCredentials, currentSpan).recover(t -> {
             final ServiceInvocationException e = (ServiceInvocationException) t;
             if (e.getErrorCode() == HttpURLConnection.HTTP_NOT_FOUND) {
                 return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_UNAUTHORIZED, "bad credentials"));
@@ -116,11 +129,23 @@ public abstract class CredentialsApiAuthProvider implements HonoClientBasedAuthP
     @Override
     public final void authenticate(final JsonObject authInfo, final Handler<AsyncResult<User>> resultHandler) {
 
+        authenticate(authInfo, null, resultHandler);
+    }
+
+    @Override
+    public final void authenticate(
+            final JsonObject authInfo,
+            final SpanContext currentSpan,
+            final Handler<AsyncResult<User>> resultHandler) {
+
+        Objects.requireNonNull(authInfo);
+        Objects.requireNonNull(resultHandler);
+
         final DeviceCredentials credentials = getCredentials(Objects.requireNonNull(authInfo));
         if (credentials == null) {
             resultHandler.handle(Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_UNAUTHORIZED, "malformed credentials")));
         } else {
-            authenticate(credentials, s -> {
+            authenticate(credentials, currentSpan, s -> {
                 if (s.succeeded()) {
                     resultHandler.handle(Future.succeededFuture(s.result()));
                 } else {

@@ -40,6 +40,7 @@ import org.junit.Test;
 import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 
+import io.opentracing.SpanContext;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -90,7 +91,7 @@ public class VertxBasedHttpProtocolAdapterTest {
         vertx = Vertx.vertx();
 
         final TenantClient tenantClient = mock(TenantClient.class);
-        when(tenantClient.get(anyString())).thenReturn(Future.future());
+        when(tenantClient.get(anyString(), any())).thenReturn(Future.future());
 
         tenantServiceClient = mock(HonoClient.class);
         when(tenantServiceClient.connect(any(Handler.class))).thenReturn(Future.succeededFuture(tenantServiceClient));
@@ -169,10 +170,10 @@ public class VertxBasedHttpProtocolAdapterTest {
         final String authHeader = getBasicAuth("testuser@DEFAULT_TENANT", "password123");
 
         doAnswer(invocation -> {
-            Handler<AsyncResult<User>> resultHandler = invocation.getArgument(1);
+            Handler<AsyncResult<User>> resultHandler = invocation.getArgument(2);
             resultHandler.handle(Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_UNAUTHORIZED, "bad credentials")));
             return null;
-        }).when(usernamePasswordAuthProvider).authenticate(any(JsonObject.class), any(Handler.class));
+        }).when(usernamePasswordAuthProvider).authenticate(any(JsonObject.class), (SpanContext) any(), any(Handler.class));
 
         vertx.createHttpClient().post(httpAdapter.getInsecurePort(), HOST, "/telemetry")
                 .putHeader(HttpHeaders.CONTENT_TYPE, HttpUtils.CONTENT_TYPE_JSON)
@@ -198,7 +199,8 @@ public class VertxBasedHttpProtocolAdapterTest {
         mockSuccessfulAuthentication("DEFAULT_TENANT", "device_1");
 
         final RegistrationClient regClient = mock(RegistrationClient.class);
-        when(regClient.assertRegistration(anyString(), any())).thenReturn(Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_NOT_FOUND)));
+        when(regClient.assertRegistration(anyString(), any(), any())).thenReturn(
+                Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_NOT_FOUND)));
         when(registrationServiceClient.getOrCreateRegistrationClient(anyString())).thenReturn(Future.succeededFuture(regClient));
 
         vertx.createHttpClient().post(httpAdapter.getInsecurePort(), HOST, "/telemetry")
@@ -228,7 +230,8 @@ public class VertxBasedHttpProtocolAdapterTest {
         mockSuccessfulAuthentication("DEFAULT_TENANT", "device_1");
 
         final RegistrationClient regClient = mock(RegistrationClient.class);
-        when(regClient.assertRegistration(anyString(), any())).thenReturn(Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_NOT_FOUND)));
+        when(regClient.assertRegistration(anyString(), any(), any())).thenReturn(
+                Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_NOT_FOUND)));
         when(registrationServiceClient.getOrCreateRegistrationClient(anyString())).thenReturn(Future.succeededFuture(regClient));
 
         vertx.createHttpClient().put(httpAdapter.getInsecurePort(), HOST, "/telemetry/DEFAULT_TENANT/device_1")
@@ -306,7 +309,7 @@ public class VertxBasedHttpProtocolAdapterTest {
         mockSuccessfulAuthentication("DEFAULT_TENANT", "device_1");
 
         final RegistrationClient regClient = mock(RegistrationClient.class);
-        when(regClient.assertRegistration(anyString(), any())).thenReturn(Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_NOT_FOUND)));
+        when(regClient.assertRegistration(anyString(), any(), any())).thenReturn(Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_NOT_FOUND)));
         when(registrationServiceClient.getOrCreateRegistrationClient(anyString())).thenReturn(Future.succeededFuture(regClient));
 
         vertx.createHttpClient().put(httpAdapter.getInsecurePort(), HOST, "/event/DEFAULT_TENANT/device_1")
@@ -331,10 +334,10 @@ public class VertxBasedHttpProtocolAdapterTest {
     @SuppressWarnings("unchecked")
     private static void mockSuccessfulAuthentication(final String tenantId, final String deviceId) {
         doAnswer(invocation -> {
-            final Handler<AsyncResult<User>> resultHandler = invocation.getArgument(1);
+            final Handler<AsyncResult<User>> resultHandler = invocation.getArgument(2);
             resultHandler.handle(Future.succeededFuture(new Device(tenantId, deviceId)));
             return null;
-        }).when(usernamePasswordAuthProvider).authenticate(any(JsonObject.class), any(Handler.class));
+        }).when(usernamePasswordAuthProvider).authenticate(any(JsonObject.class), (SpanContext) any(), any(Handler.class));
     }
 }
 

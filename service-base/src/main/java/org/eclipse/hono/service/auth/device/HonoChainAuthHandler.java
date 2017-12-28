@@ -17,10 +17,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import io.opentracing.Tracer;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.json.JsonObject;
+import io.vertx.ext.auth.AuthProvider;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.AuthHandler;
 import io.vertx.ext.web.handler.ChainAuthHandler;
@@ -43,6 +45,16 @@ public class HonoChainAuthHandler extends HonoAuthHandler implements ChainAuthHa
      */
     public HonoChainAuthHandler() {
       super(null);
+    }
+
+    /**
+     * Creates a new handler.
+     * 
+     * @param tracer The Opentracing tracer to use for tracking distributed
+     *               service invocations.
+     */
+    public HonoChainAuthHandler(final Tracer tracer) {
+      super(null, "", tracer);
     }
 
     @Override
@@ -114,7 +126,8 @@ public class HonoChainAuthHandler extends HonoAuthHandler implements ChainAuthHa
 
         // setup the desired auth provider if we can
         if (authHandler instanceof HonoAuthHandler) {
-          ctx.put(AUTH_PROVIDER_CONTEXT_KEY, ((HonoAuthHandler) authHandler).authProvider);
+          final AuthProvider authprovider = ((HonoAuthHandler) authHandler).authProvider;
+          ctx.put(AUTH_PROVIDER_CONTEXT_KEY, authprovider);
         }
         handler.handle(Future.succeededFuture(res.result()));
       });

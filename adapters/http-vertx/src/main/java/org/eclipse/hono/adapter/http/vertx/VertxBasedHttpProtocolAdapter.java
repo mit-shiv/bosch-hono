@@ -93,7 +93,7 @@ public final class VertxBasedHttpProtocolAdapter extends AbstractVertxBasedHttpP
 
         if (getConfig().isAuthenticationRequired()) {
 
-            final ChainAuthHandler authHandler = new HonoChainAuthHandler();
+            final ChainAuthHandler authHandler = new HonoChainAuthHandler(tracer);
             authHandler.append(new X509AuthHandler(
                     Optional.ofNullable(clientCertAuthProvider).orElse(
                             new X509AuthProvider(getCredentialsServiceClient(), getConfig())),
