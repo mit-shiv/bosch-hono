@@ -11,7 +11,7 @@
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
 
-package org.eclipse.hono.service.auth.device;
+package org.eclipse.hono.client.base;
 
 import java.util.HashSet;
 import java.util.Objects;

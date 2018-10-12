@@ -23,6 +23,7 @@ import io.vertx.core.buffer.Buffer;
 import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.CredentialsClient;
 import org.eclipse.hono.client.StatusCodeMapper;
+import org.eclipse.hono.client.base.AbstractRequestResponseClient;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.util.CacheDirective;
 import org.eclipse.hono.util.CredentialsConstants;

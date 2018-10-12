@@ -20,6 +20,7 @@ import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.CredentialsClient;
 import org.eclipse.hono.client.HonoClient;
 import org.eclipse.hono.client.ServiceInvocationException;
+import org.eclipse.hono.client.base.Device;
 import org.eclipse.hono.util.CredentialsObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

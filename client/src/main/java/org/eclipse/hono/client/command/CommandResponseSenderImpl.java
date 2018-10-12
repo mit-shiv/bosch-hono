@@ -10,17 +10,20 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
-package org.eclipse.hono.service.command;
+package org.eclipse.hono.client.command;
 
 import java.util.Map;
 import java.util.Objects;
 
 import org.apache.qpid.proton.amqp.messaging.ApplicationProperties;
 import org.apache.qpid.proton.message.Message;
-import org.eclipse.hono.client.impl.AbstractSender;
+import org.eclipse.hono.client.CommandResponseSender;
+import org.eclipse.hono.client.base.AbstractSender;
+import org.eclipse.hono.client.base.CommandResponse;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.util.CommandConstants;
 import org.eclipse.hono.util.MessageHelper;
+
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
 import io.opentracing.Tracer;

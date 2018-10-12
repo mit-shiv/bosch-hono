@@ -33,8 +33,8 @@ import org.eclipse.californium.scandium.DTLSConnector;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
 import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.MessageSender;
+import org.eclipse.hono.client.base.Device;
 import org.eclipse.hono.service.AbstractProtocolAdapterBase;
-import org.eclipse.hono.service.auth.device.Device;
 import org.eclipse.hono.util.Constants;
 import org.eclipse.hono.util.EventConstants;
 import org.eclipse.hono.util.ResourceIdentifier;
@@ -444,9 +444,9 @@ public abstract class AbstractVertxBasedCoapAdapter<T extends CoapAdapterPropert
      * @param endpointName message destination endpoint name
      */
     private void doUploadMessage(final CoapExchange exchange, final Device authenticatedDevice, final Device device,
-            final boolean waitForOutcome, final Buffer payload, final String contentType,
-            final Future<MessageSender> senderTracker,
-            final String endpointName) {
+                                 final boolean waitForOutcome, final Buffer payload, final String contentType,
+                                 final Future<MessageSender> senderTracker,
+                                 final String endpointName) {
 
         if (contentType == null) {
             exchange.respond(ResponseCode.NOT_ACCEPTABLE);

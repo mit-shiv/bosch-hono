@@ -12,10 +12,10 @@
  *******************************************************************************/
 package org.eclipse.hono.service.monitoring;
 
-import org.eclipse.hono.service.auth.device.Device;
 
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonObject;
+import org.eclipse.hono.client.base.Device;
 
 /**
  * Produces connection events.

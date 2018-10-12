@@ -26,6 +26,7 @@ import org.eclipse.hono.cache.CacheProvider;
 import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.StatusCodeMapper;
 import org.eclipse.hono.client.TenantClient;
+import org.eclipse.hono.client.base.AbstractRequestResponseClient;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.tracing.TracingHelper;
 import org.eclipse.hono.util.CacheDirective;

@@ -26,9 +26,12 @@ import java.util.Objects;
 
 import org.apache.qpid.proton.engine.impl.RecordImpl;
 import org.eclipse.hono.client.MessageConsumer;
+import org.eclipse.hono.client.CommandConnection;
+import org.eclipse.hono.client.command.CommandConnectionImpl;
+import org.eclipse.hono.client.base.CommandContext;
+import org.eclipse.hono.client.base.Device;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.connection.ConnectionFactory;
-import org.eclipse.hono.service.auth.device.Device;
 import org.eclipse.hono.util.Constants;
 import org.junit.Before;
 import org.junit.BeforeClass;

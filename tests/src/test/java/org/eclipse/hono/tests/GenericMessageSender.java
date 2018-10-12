@@ -21,7 +21,7 @@ import org.apache.qpid.proton.amqp.messaging.Accepted;
 import org.apache.qpid.proton.message.Message;
 import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.ServerErrorException;
-import org.eclipse.hono.client.impl.AbstractHonoClient;
+import org.eclipse.hono.client.base.AbstractHonoClient;
 import org.eclipse.hono.config.ClientConfigProperties;
 
 import io.vertx.core.Context;

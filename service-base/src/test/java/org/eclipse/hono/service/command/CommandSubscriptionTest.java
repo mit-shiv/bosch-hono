@@ -13,7 +13,8 @@
 
 package org.eclipse.hono.service.command;
 
-import org.eclipse.hono.service.auth.device.Device;
+import org.eclipse.hono.client.base.CommandSubscription;
+import org.eclipse.hono.client.base.Device;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;

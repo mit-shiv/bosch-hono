@@ -18,6 +18,7 @@ import java.util.Objects;
 
 import org.eclipse.hono.client.CommandClient;
 import org.eclipse.hono.client.StatusCodeMapper;
+import org.eclipse.hono.client.base.AbstractRequestResponseClient;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.util.CacheDirective;
 import org.eclipse.hono.util.CommandConstants;

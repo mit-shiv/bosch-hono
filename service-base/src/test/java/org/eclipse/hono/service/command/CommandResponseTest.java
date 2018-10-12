@@ -18,6 +18,8 @@ import static org.hamcrest.CoreMatchers.*;
 
 import java.net.HttpURLConnection;
 
+import org.eclipse.hono.client.base.Command;
+import org.eclipse.hono.client.base.CommandResponse;
 import org.junit.Test;
 
 

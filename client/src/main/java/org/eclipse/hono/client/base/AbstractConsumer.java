@@ -11,7 +11,7 @@
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
 
-package org.eclipse.hono.client.impl;
+package org.eclipse.hono.client.base;
 
 import io.opentracing.Tracer;
 import io.vertx.core.AsyncResult;

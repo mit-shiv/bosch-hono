@@ -12,7 +12,7 @@
  */
 
 
-package org.eclipse.hono.service.command;
+package org.eclipse.hono.client.base;
 
 import java.util.HashMap;
 import java.util.Map;

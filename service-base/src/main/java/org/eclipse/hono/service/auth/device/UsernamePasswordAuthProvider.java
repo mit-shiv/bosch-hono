@@ -18,6 +18,7 @@ import java.util.Objects;
 
 import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.HonoClient;
+import org.eclipse.hono.client.base.Device;
 import org.eclipse.hono.config.ServiceConfigProperties;
 import org.eclipse.hono.util.CredentialsObject;
 import org.springframework.beans.factory.annotation.Autowired;

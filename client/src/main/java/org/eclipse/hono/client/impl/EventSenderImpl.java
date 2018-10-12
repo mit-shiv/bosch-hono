@@ -18,6 +18,7 @@ import java.util.Objects;
 import org.apache.qpid.proton.message.Message;
 import org.eclipse.hono.client.MessageSender;
 import org.eclipse.hono.client.ServiceInvocationException;
+import org.eclipse.hono.client.base.AbstractSender;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.util.EventConstants;
 

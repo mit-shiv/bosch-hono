@@ -27,6 +27,7 @@ import java.util.Map;
 
 import org.apache.qpid.proton.amqp.messaging.ApplicationProperties;
 import org.apache.qpid.proton.message.Message;
+import org.eclipse.hono.client.base.Command;
 import org.eclipse.hono.util.CommandConstants;
 import org.eclipse.hono.util.Constants;
 import org.junit.Test;

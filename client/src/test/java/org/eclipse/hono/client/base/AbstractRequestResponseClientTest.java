@@ -11,7 +11,7 @@
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
 
-package org.eclipse.hono.client.impl;
+package org.eclipse.hono.client.base;
 
 import static org.hamcrest.CoreMatchers.*;
 import static org.junit.Assert.assertThat;
@@ -33,6 +33,8 @@ import org.apache.qpid.proton.message.Message;
 import org.eclipse.hono.cache.ExpiringValueCache;
 import org.eclipse.hono.client.RequestResponseClientConfigProperties;
 import org.eclipse.hono.client.ServerErrorException;
+import org.eclipse.hono.client.impl.HonoClientUnitTestHelper;
+import org.eclipse.hono.client.impl.SimpleRequestResponseResult;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.util.CacheDirective;
 import org.eclipse.hono.util.MessageHelper;

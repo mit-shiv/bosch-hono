@@ -11,7 +11,7 @@
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
 
-package org.eclipse.hono.client.impl;
+package org.eclipse.hono.client.base;
 
 import java.net.HttpURLConnection;
 import java.nio.charset.Charset;
@@ -34,6 +34,7 @@ import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.MessageSender;
 import org.eclipse.hono.client.ServerErrorException;
 import org.eclipse.hono.client.ServiceInvocationException;
+import org.eclipse.hono.client.base.AbstractHonoClient;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.tracing.MessageAnnotationsInjectAdapter;
 import org.eclipse.hono.tracing.TracingHelper;

@@ -22,6 +22,7 @@ import io.vertx.proton.ProtonQoS;
 import io.vertx.proton.ProtonReceiver;
 import org.apache.qpid.proton.message.Message;
 import org.eclipse.hono.client.MessageConsumer;
+import org.eclipse.hono.client.base.AbstractConsumer;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.eclipse.hono.util.Constants;
 import org.eclipse.hono.util.TelemetryConstants;

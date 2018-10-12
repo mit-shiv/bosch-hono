@@ -10,17 +10,15 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
-package org.eclipse.hono.service.command;
+package org.eclipse.hono.client;
 
 import java.util.Map;
-
-import org.eclipse.hono.client.MessageSender;
-import org.eclipse.hono.client.ServiceInvocationException;
 
 import io.opentracing.SpanContext;
 import io.vertx.core.Future;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.proton.ProtonDelivery;
+import org.eclipse.hono.client.base.CommandResponse;
 
 /**
  * A sender to send back the response message of a command.

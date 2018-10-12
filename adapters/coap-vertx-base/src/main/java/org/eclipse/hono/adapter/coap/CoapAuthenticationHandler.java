@@ -16,9 +16,9 @@ package org.eclipse.hono.adapter.coap;
 import java.security.Principal;
 
 import org.eclipse.californium.core.server.resources.CoapExchange;
-import org.eclipse.hono.service.auth.device.Device;
 
 import io.vertx.core.Future;
+import org.eclipse.hono.client.base.Device;
 
 /**
  * Authentication handler for coap principals.

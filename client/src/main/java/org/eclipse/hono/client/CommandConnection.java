@@ -11,13 +11,11 @@
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
 
-package org.eclipse.hono.service.command;
-
-import org.eclipse.hono.client.HonoClient;
-import org.eclipse.hono.client.MessageConsumer;
+package org.eclipse.hono.client;
 
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
+import org.eclipse.hono.client.base.CommandContext;
 
 /**
  * A bidirectional connection between an Adapter and the AMQP 1.0 network to receive commands and send a response.

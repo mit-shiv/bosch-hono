@@ -11,7 +11,7 @@
  * SPDX-License-Identifier: EPL-2.0
  *******************************************************************************/
 
-package org.eclipse.hono.client.impl;
+package org.eclipse.hono.client.base;
 
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
@@ -32,6 +32,8 @@ import org.apache.qpid.proton.engine.impl.RecordImpl;
 import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.ServerErrorException;
 import org.eclipse.hono.client.ServiceInvocationException;
+import org.eclipse.hono.client.base.AbstractHonoClient;
+import org.eclipse.hono.client.impl.HonoClientUnitTestHelper;
 import org.eclipse.hono.config.ClientConfigProperties;
 import org.junit.Before;
 import org.junit.Rule;

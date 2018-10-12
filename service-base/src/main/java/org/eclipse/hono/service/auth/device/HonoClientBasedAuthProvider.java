@@ -16,6 +16,7 @@ package org.eclipse.hono.service.auth.device;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.ext.auth.AuthProvider;
+import org.eclipse.hono.client.base.Device;
 
 
 /**
