@@ -80,7 +80,10 @@ The website pipeline builds the following versions:
 
 * `dev`: always built from the current `HEAD` of the master branch
 * `stable`: the version from the Git tag in the file `site/documentation/tag_stable.txt`
-* each version in `site/documentation/versions_supported.csv`
+* each other version in `site/documentation/versions_supported.csv`
+
+Note: The Git tag (or branch) in `site/documentation/tag_stable.txt` must match a tag (or branch) in 
+`site/documentation/versions_supported.csv`.
 
 ### What are the checkboxes in the release pipeline doing?
 

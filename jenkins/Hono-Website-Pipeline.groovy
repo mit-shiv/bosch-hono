@@ -124,14 +124,20 @@ EOS
             
             TAG_STABLE=$(cat "$WORKSPACE/hono-documentation-assembly/tag_stable.txt")
             while IFS=";" read -r MAJOR MINOR TAG
+            stable_version_is_missing=true
             do
               if [[ "${TAG}" == "${TAG_STABLE}" ]]; then
                 prepare_stable ${MAJOR} ${MINOR} ${TAG}
+                stable_version_is_missing=false
               else
                 prepare_docu_version ${MAJOR} ${MINOR} ${TAG}
               fi
             done < <(tail -n+3 $WORKSPACE/hono-documentation-assembly/versions_supported.csv)  # skip header line and comment
           
+          if [ "${stable_version_is_missing}" = true ]; then
+            echo "Error: 'versions_supported.csv' does not contain the Git tag or branch from 'tag_stable.txt'"
+            exit 1
+          fi
           cd $WORKSPACE/hono-documentation-assembly
           echo "building documentation using Hugo `/shared/common/hugo/latest/hugo version`"
           /shared/common/hugo/latest/hugo -v -d $WORKSPACE/hono-web-site/docs --config config.toml,config_version.toml
