@@ -187,7 +187,7 @@
     <!--
       The Docker registry to use for our Docker image names.
     -->
-    <docker.registry>index.docker.io</docker.registry>
+    <docker.registry>registry.hub.docker.com</docker.registry>
 
     <!--
       The Docker repository to use for our Docker image names.

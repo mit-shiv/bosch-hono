@@ -45,48 +45,42 @@
       <build>
         <plugins>
           <plugin>
-            <groupId>io.fabric8</groupId>
-            <artifactId>docker-maven-plugin</artifactId>
+            <groupId>com.google.cloud.tools</groupId>
+            <artifactId>jib-maven-plugin</artifactId>
+            <version>1.7.0</version>
+            <executions>
+              <execution>
+                <id>build_images</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>build</goal>
+                </goals>
+              </execution>
+            </executions>
             <configuration>
-              <images>
-                <image>
-                  <build>
-                    <from>${java-base-image.name}</from>
-                    <ports>
-                      <port>5671</port>
-                      <port>5672</port>
-                      <port>${vertx.health.port}</port>
-                    </ports>
-                    <cmd>
-                      <exec>
-                        <arg>java</arg>
-                        <arg>--illegal-access=permit</arg>
-                        <arg>-Dvertx.cacheDirBase=/tmp</arg>
-                        <arg>-Dloader.home=/opt/hono</arg>
-                        <arg>-Dloader.path=extensions</arg>
-                        <arg>-cp</arg>
-                        <arg>/opt/hono/${project.artifactId}-${project.version}-${classifier.spring.boot.artifact}.jar</arg>
-                        <arg>org.springframework.boot.loader.PropertiesLauncher</arg>
-                      </exec>
-                    </cmd>
-                    <assembly>
-                      <mode>dir</mode>
-                      <basedir>/</basedir>
-                      <inline>
-                        <fileSets>
-                          <fileSet>
-                            <directory>${project.build.directory}</directory>
-                            <outputDirectory>opt/hono</outputDirectory>
-                            <includes>
-                              <include>${project.artifactId}-${project.version}-${classifier.spring.boot.artifact}.jar</include>
-                            </includes>
-                          </fileSet>
-                        </fileSets>
-                      </inline>
-                    </assembly>
-                  </build>
-                </image>
-              </images>
+              <from>
+                <image>${java-base-image.name}</image>
+              </from>
+              <to>
+                <image>${docker.repository}/${project.artifactId}</image>
+                <tags>
+                  <tag>${project.version}</tag>
+                  <tag>latest</tag>
+                </tags>
+              </to>
+              <container>
+                <appRoot>/opt/hono</appRoot>
+                <jvmFlags>
+                  <jvmFlag>--illegal-access=permit</jvmFlag>
+                  <jvmFlag>-Dvertx.cacheDirBase=/tmp</jvmFlag>
+                </jvmFlags>
+                <ports>
+                  <port>5671</port>
+                  <port>5672</port>
+                  <port>${vertx.health.port}</port>
+                </ports>
+                <format>Docker</format>
+              </container>
             </configuration>
           </plugin>
         </plugins>
