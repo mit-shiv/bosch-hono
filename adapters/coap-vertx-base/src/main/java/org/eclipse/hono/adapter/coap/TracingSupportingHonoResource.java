@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019, 2020 Contributors to the Eclipse Foundation
+ * Copyright (c) 2019, 2021 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -14,6 +14,8 @@
 
 package org.eclipse.hono.adapter.coap;
 
+import java.net.HttpURLConnection;
+import java.security.Principal;
 import java.util.Objects;
 
 import org.eclipse.californium.core.CoapResource;
@@ -23,7 +25,11 @@ import org.eclipse.californium.core.coap.Response;
 import org.eclipse.californium.core.network.Exchange;
 import org.eclipse.californium.core.server.resources.CoapExchange;
 import org.eclipse.californium.core.server.resources.Resource;
+import org.eclipse.californium.elements.auth.ExtensiblePrincipal;
 import org.eclipse.hono.adapter.client.registry.TenantClient;
+import org.eclipse.hono.auth.Device;
+import org.eclipse.hono.client.ClientErrorException;
+import org.eclipse.hono.client.ServerErrorException;
 import org.eclipse.hono.tracing.TenantTraceSamplingHelper;
 import org.eclipse.hono.tracing.TracingHelper;
 import org.slf4j.Logger;
@@ -35,12 +41,13 @@ import io.opentracing.Tracer;
 import io.opentracing.propagation.Format;
 import io.opentracing.tag.Tags;
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
 
 
 /**
  * A CoAP resource that supports the tracking of request processing using <em>OpenTracing</em>.
  * <p>
- * This resource supports processing of {@code POST} and {@code PUT} requests only.
+ * This resource supports processing of {@code POST}, {@code PUT} and {@code DELETE} requests only.
  * For each request, a new OpenTracing {@code Span} is created. The {@code Span} context is
  * associated with the {@link CoapContext} that is created via {@link #createCoapContextForPost(CoapExchange, Span)}
  * or {@link #createCoapContextForPut(CoapExchange, Span)}. The {@link CoapContext} is
@@ -89,6 +96,53 @@ public abstract class TracingSupportingHonoResource extends CoapResource {
         return this;
     }
 
+    /**
+     * Gets an authenticated device's identity for a CoAP request.
+     *
+     * @param exchange The CoAP exchange with the authenticated device's principal.
+     * @return A future indicating the outcome of the operation.
+     *         The future will be succeeded if the authenticated device can be determined from the CoAP exchange,
+     *         otherwise the future will be failed with a {@link ClientErrorException}.
+     */
+    public static Future<Device> getAuthenticatedDevice(final CoapExchange exchange) {
+
+        final Promise<Device> result = Promise.promise();
+        final Principal peerIdentity = exchange.advanced().getRequest().getSourceContext().getPeerIdentity();
+        if (peerIdentity instanceof ExtensiblePrincipal) {
+            final ExtensiblePrincipal<?> extPrincipal = (ExtensiblePrincipal<?>) peerIdentity;
+            final Device authenticatedDevice = extPrincipal.getExtendedInfo()
+                    .get(DefaultDeviceResolver.EXT_INFO_KEY_HONO_DEVICE, Device.class);
+            if (authenticatedDevice != null) {
+                result.complete(authenticatedDevice);
+            } else {
+                result.fail(new ClientErrorException(
+                        HttpURLConnection.HTTP_UNAUTHORIZED,
+                        "DTLS session does not contain authenticated Device"));
+            }
+        } else {
+            result.fail(new ClientErrorException(
+                    HttpURLConnection.HTTP_UNAUTHORIZED,
+                    "DTLS session does not contain ExtensiblePrincipal"));
+
+        }
+        return result.future();
+    }
+
+    /**
+     * Gets the authentication identifier of a CoAP request.
+     *
+     * @param exchange The CoAP exchange with the authenticated device's principal.
+     * @return The authentication identifier or {@code null} if it could not be determined.
+     */
+    public static String getAuthId(final CoapExchange exchange) {
+        final Principal peerIdentity = exchange.advanced().getRequest().getSourceContext().getPeerIdentity();
+        if (!(peerIdentity instanceof ExtensiblePrincipal)) {
+            return null;
+        }
+        final ExtensiblePrincipal<?> extPrincipal = (ExtensiblePrincipal<?>) peerIdentity;
+        return extPrincipal.getExtendedInfo().get(DefaultDeviceResolver.EXT_INFO_KEY_HONO_AUTH_ID, String.class);
+    }
+
     private SpanContext extractSpanContextFromRequest(final OptionSet requestOptions) {
         return CoapOptionInjectExtractAdapter.forExtraction(requestOptions)
                 .map(carrier -> tracer.extract(Format.Builtin.BINARY, carrier))
@@ -126,6 +180,11 @@ public abstract class TracingSupportingHonoResource extends CoapResource {
                     .compose(coapContext -> applyTraceSamplingPriority(coapContext, currentSpan))
                     .compose(this::handlePut);
             break;
+        case DELETE:
+            responseCode = createCoapContextForDelete(coapExchange, currentSpan)
+                    .compose(coapContext -> applyTraceSamplingPriority(coapContext, currentSpan))
+                    .compose(this::handleDelete);
+            break;
         default:
             final Response response = CoapErrorResponse.respond("unsupported method", ResponseCode.METHOD_NOT_ALLOWED);
             coapExchange.respond(response);
@@ -148,25 +207,51 @@ public abstract class TracingSupportingHonoResource extends CoapResource {
 
     /**
      * Creates a CoAP context for an incoming POST request.
+     * <p>
+     * This default implementation always returns a future that is failed with a
+     * {@link ServerErrorException} with status code {@value HttpURLConnection#HTTP_NOT_IMPLEMENTED}.
      *
      * @param coapExchange The CoAP exchange to process.
      * @param span The <em>OpenTracing</em> root span that is used to track the processing of the created context.
      * @return A future indicating the outcome of processing the request.
      *         The future will be succeeded with the created CoAP context,
-     *         otherwise the future will be failed with a {@link org.eclipse.hono.client.ClientErrorException}.
+     *         otherwise the future will be failed with a {@link org.eclipse.hono.client.ServiceInvocationException}.
      */
-    protected abstract Future<CoapContext> createCoapContextForPost(CoapExchange coapExchange, Span span);
+    protected Future<CoapContext> createCoapContextForPost(final CoapExchange coapExchange, final Span span) {
+        return Future.failedFuture(new ServerErrorException(HttpURLConnection.HTTP_NOT_IMPLEMENTED));
+    }
 
     /**
      * Creates a CoAP context for an incoming PUT request.
+     * <p>
+     * This default implementation always returns a future that is failed with a
+     * {@link ServerErrorException} with status code {@value HttpURLConnection#HTTP_NOT_IMPLEMENTED}.
      *
      * @param coapExchange The CoAP exchange to process.
      * @param span The <em>OpenTracing</em> root span that is used to track the processing of the created context.
      * @return A future indicating the outcome of processing the request.
      *         The future will be succeeded with the created CoAP context,
-     *         otherwise the future will be failed with a {@link org.eclipse.hono.client.ClientErrorException}.
+     *         otherwise the future will be failed with a {@link org.eclipse.hono.client.ServiceInvocationException}.
      */
-    protected abstract Future<CoapContext> createCoapContextForPut(CoapExchange coapExchange, Span span);
+    protected Future<CoapContext> createCoapContextForPut(final CoapExchange coapExchange, final Span span) {
+        return Future.failedFuture(new ServerErrorException(HttpURLConnection.HTTP_NOT_IMPLEMENTED));
+    }
+
+    /**
+     * Creates a CoAP context for an incoming DELETE request.
+     * <p>
+     * This default implementation always returns a future that is failed with a
+     * {@link ServerErrorException} with status code {@value HttpURLConnection#HTTP_NOT_IMPLEMENTED}.
+     *
+     * @param coapExchange The CoAP exchange to process.
+     * @param span The <em>OpenTracing</em> root span that is used to track the processing of the created context.
+     * @return A future indicating the outcome of processing the request.
+     *         The future will be succeeded with the created CoAP context,
+     *         otherwise the future will be failed with a {@link org.eclipse.hono.client.ServiceInvocationException}.
+     */
+    protected Future<CoapContext> createCoapContextForDelete(final CoapExchange coapExchange, final Span span) {
+        return Future.failedFuture(new ServerErrorException(HttpURLConnection.HTTP_NOT_IMPLEMENTED));
+    }
 
     /**
      * Applies the trace sampling priority configured for the tenant associated with the
@@ -218,6 +303,23 @@ public abstract class TracingSupportingHonoResource extends CoapResource {
      *         otherwise the future will be failed with a {@link org.eclipse.hono.client.ServiceInvocationException}.
      */
     protected Future<ResponseCode> handlePut(final CoapContext coapContext) {
+        final Response response = CoapErrorResponse.respond("not implemented", ResponseCode.NOT_IMPLEMENTED);
+        coapContext.respond(response);
+        return Future.succeededFuture(response.getCode());
+    }
+
+    /**
+     * Invoked for an incoming DELETE request.
+     * <p>
+     * This default implementation sends a response back to the client
+     * with response code {@link ResponseCode#NOT_IMPLEMENTED}.
+     *
+     * @param coapContext The CoAP context of the current request.
+     * @return A future indicating the outcome of processing the request.
+     *         The future will be succeeded with the CoAP response code sent back to the client,
+     *         otherwise the future will be failed with a {@link org.eclipse.hono.client.ServiceInvocationException}.
+     */
+    protected Future<ResponseCode> handleDelete(final CoapContext coapContext) {
         final Response response = CoapErrorResponse.respond("not implemented", ResponseCode.NOT_IMPLEMENTED);
         coapContext.respond(response);
         return Future.succeededFuture(response.getCode());

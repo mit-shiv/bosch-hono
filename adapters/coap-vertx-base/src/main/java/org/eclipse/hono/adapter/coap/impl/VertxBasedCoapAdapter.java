@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2018, 2020 Contributors to the Eclipse Foundation
+ * Copyright (c) 2018, 2021 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -85,8 +85,11 @@ public final class VertxBasedCoapAdapter extends AbstractVertxBasedCoapAdapter<C
                 // unauthenticated device request
                 return Future.succeededFuture(new RequestDeviceAndAuth(device, null, null));
             } else {
-                return getAuthenticatedDevice(exchange)
-                        .map(authenticatedDevice -> new RequestDeviceAndAuth(device, getAuthId(exchange), authenticatedDevice));
+                return TracingSupportingHonoResource.getAuthenticatedDevice(exchange)
+                        .map(authenticatedDevice -> new RequestDeviceAndAuth(
+                                device,
+                                TracingSupportingHonoResource.getAuthId(exchange),
+                                authenticatedDevice));
             }
         } catch (final IllegalArgumentException cause) {
             return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST,
@@ -103,8 +106,10 @@ public final class VertxBasedCoapAdapter extends AbstractVertxBasedCoapAdapter<C
      *         otherwise the future will be failed with a {@link ClientErrorException}.
      */
     public Future<RequestDeviceAndAuth> getPostRequestDeviceAndAuth(final CoapExchange exchange) {
-        return getAuthenticatedDevice(exchange)
-                .map(authenticatedDevice -> new RequestDeviceAndAuth(authenticatedDevice, getAuthId(exchange),
+        return TracingSupportingHonoResource.getAuthenticatedDevice(exchange)
+                .map(authenticatedDevice -> new RequestDeviceAndAuth(
+                        authenticatedDevice,
+                        TracingSupportingHonoResource.getAuthId(exchange),
                         authenticatedDevice));
     }
 
@@ -189,6 +194,8 @@ public final class VertxBasedCoapAdapter extends AbstractVertxBasedCoapAdapter<C
                 return uploadCommandResponseMessage(ctx);
             }
         });
+
+        result.add(new SimpleResourceDirectory(tracer));
         setResources(result);
         return Future.succeededFuture();
     }

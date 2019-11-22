@@ -37,6 +37,10 @@
       <artifactId>scandium</artifactId>
     </dependency>
     <dependency>
+      <groupId>org.eclipse.leshan</groupId>
+      <artifactId>leshan-server-cf</artifactId>
+    </dependency>
+    <dependency>
       <groupId>io.jaegertracing</groupId>
       <artifactId>jaeger-client</artifactId>
       <scope>test</scope>

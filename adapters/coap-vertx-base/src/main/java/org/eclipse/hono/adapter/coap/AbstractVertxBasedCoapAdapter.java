@@ -17,15 +17,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
-import java.security.Principal;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
@@ -34,6 +37,7 @@ import org.eclipse.californium.core.coap.CoAP;
 import org.eclipse.californium.core.coap.CoAP.ResponseCode;
 import org.eclipse.californium.core.coap.MediaTypeRegistry;
 import org.eclipse.californium.core.coap.OptionSet;
+import org.eclipse.californium.core.coap.Request;
 import org.eclipse.californium.core.coap.Response;
 import org.eclipse.californium.core.network.CoapEndpoint;
 import org.eclipse.californium.core.network.Endpoint;
@@ -41,7 +45,6 @@ import org.eclipse.californium.core.network.config.NetworkConfig;
 import org.eclipse.californium.core.network.config.NetworkConfig.Keys;
 import org.eclipse.californium.core.server.resources.CoapExchange;
 import org.eclipse.californium.core.server.resources.Resource;
-import org.eclipse.californium.elements.auth.ExtensiblePrincipal;
 import org.eclipse.californium.scandium.DTLSConnector;
 import org.eclipse.californium.scandium.auth.ApplicationLevelInfoSupplier;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
@@ -66,13 +69,33 @@ import org.eclipse.hono.util.Constants;
 import org.eclipse.hono.util.Futures;
 import org.eclipse.hono.util.MessageHelper;
 import org.eclipse.hono.util.RegistrationAssertion;
+import org.eclipse.hono.util.Strings;
 import org.eclipse.hono.util.TenantObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.eclipse.leshan.core.Link;
+import org.eclipse.leshan.core.californium.EndpointContextUtil;
+import org.eclipse.leshan.core.node.LwM2mNode;
+import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
+import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
+import org.eclipse.leshan.core.observation.Observation;
+import org.eclipse.leshan.core.request.BindingMode;
+import org.eclipse.leshan.core.request.CancelObservationRequest;
+import org.eclipse.leshan.core.request.ObserveRequest;
+import org.eclipse.leshan.core.response.ErrorCallback;
+import org.eclipse.leshan.server.californium.observation.ObservationServiceImpl;
+import org.eclipse.leshan.server.californium.registration.CaliforniumRegistrationStore;
+import org.eclipse.leshan.server.californium.registration.InMemoryRegistrationStore;
+import org.eclipse.leshan.server.californium.request.CaliforniumLwM2mRequestSender;
+import org.eclipse.leshan.server.model.StandardModelProvider;
+import org.eclipse.leshan.server.registration.ExpirationListener;
+import org.eclipse.leshan.server.registration.Registration;
+import org.eclipse.leshan.server.registration.RegistrationUpdate;
+import org.eclipse.leshan.server.request.LwM2mRequestSender2;
 
 import io.micrometer.core.instrument.Timer.Sample;
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
+import io.opentracing.Tracer;
+import io.opentracing.log.Fields;
 import io.opentracing.tag.Tags;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.CompositeFuture;
@@ -102,20 +125,17 @@ public abstract class AbstractVertxBasedCoapAdapter<T extends CoapAdapterPropert
      */
     private static final int MEMORY_PER_CONNECTION = 10_000; // 10KB: expected avg. memory consumption per connection
 
-    /**
-     * A logger shared with subclasses.
-     */
-    protected final Logger log = LoggerFactory.getLogger(getClass());
-
     private final Set<Resource> resourcesToAdd = new HashSet<>();
 
     private CoapServer server;
     private CoapAdapterMetrics metrics = CoapAdapterMetrics.NOOP;
     private ApplicationLevelInfoSupplier honoDeviceResolver;
     private AdvancedPskStore pskStore;
+    private CaliforniumRegistrationStore lwm2mRegistrationStore;
 
     private volatile Endpoint secureEndpoint;
     private volatile Endpoint insecureEndpoint;
+    private volatile LwM2mRequestSender2 lwm2mRequestSender;
 
     /**
      * Sets the service to use for resolving an authenticated CoAP client to a Hono device.
@@ -223,6 +243,24 @@ public abstract class AbstractVertxBasedCoapAdapter<T extends CoapAdapterPropert
         Optional.ofNullable(server)
                 .map(s -> Future.succeededFuture(s))
                 .orElseGet(this::createServer)
+                .map(serverToStart -> {
+
+                    lwm2mRegistrationStore = new InMemoryRegistrationStore();
+                    final var modelProvider = new StandardModelProvider();
+                    final var nodeDecoder = new DefaultLwM2mNodeDecoder();
+                    final var observationService = new ObservationServiceImpl(
+                            lwm2mRegistrationStore,
+                            modelProvider,
+                            nodeDecoder);
+                    lwm2mRequestSender = new CaliforniumLwM2mRequestSender(
+                            secureEndpoint,
+                            insecureEndpoint,
+                            observationService,
+                            modelProvider,
+                            new DefaultLwM2mNodeEncoder(),
+                            nodeDecoder);
+                    return serverToStart;
+                })
                 .compose(serverToStart -> preStartup().map(serverToStart))
                 .map(serverToStart -> {
                     addResources(serverToStart);
@@ -230,6 +268,7 @@ public abstract class AbstractVertxBasedCoapAdapter<T extends CoapAdapterPropert
                 })
                 .compose(serverToStart -> Futures.executeBlocking(vertx, () -> {
                     serverToStart.start();
+                    lwm2mRegistrationStore.start();
                     return serverToStart;
                 }))
                 .compose(serverToStart -> {
@@ -542,6 +581,9 @@ public abstract class AbstractVertxBasedCoapAdapter<T extends CoapAdapterPropert
         }
 
         Futures.executeBlocking(vertx, () -> {
+            if (lwm2mRegistrationStore != null) {
+                lwm2mRegistrationStore.stop();
+            }
             if (server != null) {
                 server.stop();
             }
@@ -566,53 +608,6 @@ public abstract class AbstractVertxBasedCoapAdapter<T extends CoapAdapterPropert
      */
     protected Future<Void> postShutdown() {
         return Future.succeededFuture();
-    }
-
-    /**
-     * Gets an authenticated device's identity for a CoAP request.
-     *
-     * @param exchange The CoAP exchange with the authenticated device's principal.
-     * @return A future indicating the outcome of the operation.
-     *         The future will be succeeded if the authenticated device can be determined from the CoAP exchange,
-     *         otherwise the future will be failed with a {@link ClientErrorException}.
-     */
-    protected final Future<Device> getAuthenticatedDevice(final CoapExchange exchange) {
-
-        final Promise<Device> result = Promise.promise();
-        final Principal peerIdentity = exchange.advanced().getRequest().getSourceContext().getPeerIdentity();
-        if (peerIdentity instanceof ExtensiblePrincipal) {
-            final ExtensiblePrincipal<?> extPrincipal = (ExtensiblePrincipal<?>) peerIdentity;
-            final Device authenticatedDevice = extPrincipal.getExtendedInfo()
-                    .get(DefaultDeviceResolver.EXT_INFO_KEY_HONO_DEVICE, Device.class);
-            if (authenticatedDevice != null) {
-                result.complete(authenticatedDevice);
-            } else {
-                result.fail(new ClientErrorException(
-                        HttpURLConnection.HTTP_UNAUTHORIZED,
-                        "DTLS session does not contain authenticated Device"));
-            }
-        } else {
-            result.fail(new ClientErrorException(
-                    HttpURLConnection.HTTP_UNAUTHORIZED,
-                    "DTLS session does not contain ExtensiblePrincipal"));
-
-        }
-        return result.future();
-    }
-
-    /**
-     * Gets the authentication identifier of a CoAP request.
-     *
-     * @param exchange The CoAP exchange with the authenticated device's principal.
-     * @return The authentication identifier or {@code null} if it could not be determined.
-     */
-    protected final String getAuthId(final CoapExchange exchange) {
-        final Principal peerIdentity = exchange.advanced().getRequest().getSourceContext().getPeerIdentity();
-        if (!(peerIdentity instanceof ExtensiblePrincipal)) {
-            return null;
-        }
-        final ExtensiblePrincipal<?> extPrincipal = (ExtensiblePrincipal<?>) peerIdentity;
-        return extPrincipal.getExtendedInfo().get(DefaultDeviceResolver.EXT_INFO_KEY_HONO_AUTH_ID, String.class);
     }
 
     /**
@@ -1200,4 +1195,364 @@ public abstract class AbstractVertxBasedCoapAdapter<T extends CoapAdapterPropert
                     return context.respond(response);
                 });
     }
+
+    /**
+     * A CoAP resource implementing basic parts of the
+     * <a href="https://tools.ietf.org/html/draft-ietf-core-resource-directory-23">
+     * CoRE Resource Directory</a>.
+     * <p>
+     * The registration, update and removal requests of devices are mapped to <em>empty
+     * notification</em> events containing the <em>lifetime</em> provided by the device
+     * as TTD value.
+     *
+     */
+    protected final class SimpleResourceDirectory extends TracingSupportingHonoResource {
+
+        private static final String QUERY_PARAM_BINDING_MODE = "b";
+        private static final String QUERY_PARAM_ENDPOINT = "ep";
+        private static final String QUERY_PARAM_LIFETIME = "lt";
+        private static final String QUERY_PARAM_LWM2M_VERSION = "lwm2m";
+
+        private final Set<BindingMode> supportedBindingModes = Set.of(BindingMode.U, BindingMode.UQ);
+        private final Map<String, CommandConsumer> commandConsumers = new ConcurrentHashMap<>();
+
+        /**
+         * Creates a new resource directory resource.
+         *
+         * @param tracer Open Tracing tracer to use for tracking the processing of requests.
+         */
+        public SimpleResourceDirectory(final Tracer tracer) {
+            super(tracer, "rd", getTypeName(), getTenantClient());
+            getAttributes().addResourceType("core.rd");
+            lwm2mRegistrationStore.setExpirationListener(new ExpirationListener() {
+
+                @Override
+                public void registrationExpired(final Registration registration, final Collection<Observation> observations) {
+                    cancelCommandSubscription(registration, observations);
+                }
+            });
+        }
+
+        private String getRegistrationId(final Device device) {
+            return String.format("%s:%s", device.getTenantId(), device.getDeviceId());
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        protected Future<CoapContext> createCoapContextForPost(final CoapExchange coapExchange, final Span span) {
+            return getAuthenticatedDevice(coapExchange)
+                    .map(device -> CoapContext.fromRequest(coapExchange, device, device, null, span));
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        protected Future<CoapContext> createCoapContextForDelete(final CoapExchange coapExchange, final Span span) {
+            return getAuthenticatedDevice(coapExchange)
+                    .map(device -> CoapContext.fromRequest(coapExchange, device, device, null, span));
+        }
+
+        /**
+         * {@inheritDoc}
+         *
+         * Handles a request to create or update a device's registration.
+         */
+        @Override
+        protected Future<ResponseCode> handlePost(final CoapContext ctx) {
+
+            final Request request = ctx.getExchange().advanced().getRequest();
+            log.debug("processing POST request: {}", request);
+
+            // we only support confirmable messages
+            if (!ctx.isConfirmable()) {
+                return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST));
+            }
+
+            if (!ctx.isDeviceAuthenticated()) {
+                return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_FORBIDDEN));
+            }
+
+            final List<String> uri = ctx.getExchange().getRequestOptions().getUriPath();
+            if (uri.isEmpty() || uri.size() > 2) {
+                return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST));
+            }
+
+            final String lwm2mVersion = ctx.getQueryParameter(QUERY_PARAM_LWM2M_VERSION);
+            if (Strings.isNullOrEmpty(lwm2mVersion)) {
+                return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST));
+            } else if (!lwm2mVersion.startsWith("1.0")) {
+                return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_PRECON_FAILED,
+                        "this server supports LwM2M version 1.0.x only"));
+            }
+
+            final String endpoint = ctx.getQueryParameter(QUERY_PARAM_ENDPOINT);
+            if (Strings.isNullOrEmpty(endpoint)) {
+                return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST));
+            }
+
+            final long lifetime = Optional.ofNullable(ctx.getQueryParameter(QUERY_PARAM_LIFETIME))
+                    .map(lt -> {
+                        try {
+                            return Long.valueOf(lt);
+                        } catch (final NumberFormatException e) {
+                            return -1L;
+                        }
+                    })
+                    .orElse(24 * 60 * 60L); // default is 24h
+            if (lifetime <= 0) {
+                return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST));
+            }
+
+            final BindingMode bindingMode = Optional.ofNullable(ctx.getQueryParameter(QUERY_PARAM_BINDING_MODE))
+                    .map(BindingMode::valueOf)
+                    .orElse(BindingMode.U);
+            if (!supportedBindingModes.contains(bindingMode)) {
+                return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_PRECON_FAILED,
+                        "this server supports binding modes U and UQ only"));
+            }
+
+            final Link[] objectLinks = Link.parse(request.getPayload());
+
+            final Promise<ResponseCode> result = Promise.promise();
+            if (uri.size() == 1) {
+                handleRegister(ctx, lwm2mVersion, endpoint, bindingMode, lifetime, objectLinks).onComplete(result);
+            } else if (uri.size() == 2) {
+                handleUpdate(ctx, endpoint, bindingMode, lifetime, objectLinks, uri.get(1)).onComplete(result);
+            } else {
+                result.fail(new ClientErrorException(HttpURLConnection.HTTP_BAD_REQUEST));
+            }
+            return result.future()
+                    .map(responseCode -> {
+                        ctx.respondWithCode(responseCode);
+                        return responseCode;
+                    });
+        }
+
+        private Future<ResponseCode> handleRegister(
+                final CoapContext ctx,
+                final String lwm2mVersion,
+                final String endpoint,
+                final BindingMode bindingMode,
+                final long lifetime,
+                final Link[] objectLinks) {
+
+            final Span currentSpan = TracingHelper
+                    .buildChildSpan(tracer, ctx.getTracingContext(), "register LwM2M device", getTypeName())
+                    .withTag(Tags.SPAN_KIND.getKey(), Tags.SPAN_KIND_SERVER)
+                    .withTag(TracingHelper.TAG_TENANT_ID, ctx.getTenantId())
+                    .withTag(TracingHelper.TAG_DEVICE_ID, ctx.getOriginDevice().getDeviceId())
+                    .start();
+
+            log.debug("processing LwM2M registration request [tenant-id: {}, device-id: {}]",
+                    ctx.getTenantId(), ctx.getOriginDevice().getDeviceId());
+            currentSpan.log(Map.of(
+                    "endpoint", endpoint,
+                    "lifetime (secs)", lifetime));
+
+            // 1. associate registration info with tenant and device ID
+            // 2. store registration information under tenant:device-id key
+            // 2. create command consumer and associate it with stored registration info
+            // 3. observe standard object(s) and register notification listener which
+            //    creates telemetry messages/events from notifications
+
+            final var identity = EndpointContextUtil.extractIdentity(ctx.getExchange().advanced().getRequest().getSourceContext());
+            final var registration = new Registration.Builder(getRegistrationId(ctx.getOriginDevice()), endpoint, identity)
+                    .lwM2mVersion(lwm2mVersion)
+                    .lifeTimeInSec(lifetime)
+                    .bindingMode(bindingMode)
+                    .objectLinks(objectLinks)
+                    .build();
+            lwm2mRegistrationStore.addRegistration(registration);
+
+            return createCommandConsumer(
+                    ctx.getTenantId(),
+                    ctx.getOriginDevice().getDeviceId(),
+                    commandContext -> {
+                        // TODO add logic for sending commands to device
+                    },
+                    currentSpan.context())
+                    .compose(commandConsumer -> {
+                        commandConsumers.put(registration.getId(), commandConsumer);
+                        return sendLifetimeAsTtdEvent(ctx, registration, currentSpan);
+                    })
+                    .compose(ok -> observeObjects(
+                            registration,
+                            List.of("/3/0", "/5/0"),
+                            content -> {
+                                log.info("observe response: {}", content);
+                            },
+                            t -> {
+                                log.info("error sending observe request", t);
+                            },
+                            currentSpan))
+                    .map(ok -> {
+                        currentSpan.log(Map.of("registration ID", registration.getId()));
+                        ctx.getExchange().setLocationPath("rd/" + registration.getId());
+                        return ResponseCode.CREATED;
+                    })
+                    .onComplete(r -> currentSpan.finish());
+        }
+
+        private Future<Void> observeObjects(
+                final Registration registration,
+                final List<String> resourcePaths,
+                final Handler<LwM2mNode> contentHandler,
+                final ErrorCallback errorCallback,
+                final Span span) {
+
+            @SuppressWarnings("rawtypes")
+            final List<Future> observeResult = new ArrayList<>(resourcePaths.size());
+            resourcePaths.forEach(path -> {
+                context.runOnContext(go -> {
+                    final Promise<Void> r = Promise.promise();
+                    lwm2mRequestSender.send(
+                            registration,
+                            new ObserveRequest(path),
+                            null,
+                            30_000L, // we require the device to answer quickly
+                            response -> {
+                                span.log(Map.of(
+                                        Fields.MESSAGE, "observing path",
+                                        "path", path));
+                                r.complete();
+                                contentHandler.handle(response.getContent());
+                            },
+                            t -> {
+                                span.log(Map.of(
+                                        Fields.MESSAGE, "cannot observe object",
+                                        "path", path));
+                                r.complete();
+                                errorCallback.onError(t);
+                            });
+                    observeResult.add(r.future());
+                });
+            });
+            return CompositeFuture.join(observeResult).mapEmpty();
+        }
+
+        private Future<ResponseCode> handleUpdate(
+                final CoapContext ctx,
+                final String endpoint,
+                final BindingMode bindingMode,
+                final long lifetime,
+                final Link[] objectlinks,
+                final String registrationId) {
+
+            final Span currentSpan = TracingHelper
+                    .buildChildSpan(tracer, ctx.getTracingContext(), "update LwM2M device registration", getTypeName())
+                    .withTag(Tags.SPAN_KIND.getKey(), Tags.SPAN_KIND_SERVER)
+                    .withTag(TracingHelper.TAG_TENANT_ID, ctx.getTenantId())
+                    .withTag(TracingHelper.TAG_DEVICE_ID, ctx.getOriginDevice().getDeviceId())
+                    .start();
+
+            log.debug("processing LwM2M registration update request [tenant-id: {}, device-id: {}, registration ID]",
+                    ctx.getTenantId(), ctx.getOriginDevice().getDeviceId(), registrationId);
+            currentSpan.log(Map.of(
+                    "endpoint", endpoint,
+                    "lifetime (secs)", lifetime));
+
+            final var registrationUpdate = new RegistrationUpdate(
+                    registrationId,
+                    EndpointContextUtil.extractIdentity(ctx.getExchange().advanced().getRequest().getSourceContext()),
+                    lifetime,
+                    null,
+                    bindingMode,
+                    objectlinks,
+                    null);
+            final var updatedReg = lwm2mRegistrationStore.updateRegistration(registrationUpdate);
+
+            return sendLifetimeAsTtdEvent(ctx, updatedReg.getUpdatedRegistration(), currentSpan)
+                    .map(ok -> ResponseCode.CHANGED)
+                    .onComplete(r -> currentSpan.finish());
+        }
+
+        private Future<?> sendLifetimeAsTtdEvent(
+                final CoapContext ctx,
+                final Registration registration,
+                final Span currentSpan) {
+
+            final int lifetime = registration.getBindingMode() == BindingMode.U
+                    ? registration.getLifeTimeInSec().intValue()
+                    : 20;
+            return sendTtdEvent(
+                    ctx.getTenantId(),
+                    ctx.getOriginDevice().getDeviceId(),
+                    ctx.getAuthenticatedDevice(),
+                    lifetime,
+                    ctx.getTracingContext());
+        }
+
+        /**
+         * {@inheritDoc}
+         *
+         * Handles a request to delete a device's registration.
+         */
+        @Override
+        protected Future<ResponseCode> handleDelete(final CoapContext ctx) {
+
+            final List<String> uri = ctx.getExchange().getRequestOptions().getUriPath();
+
+            if (uri.size() >= 2) {
+                return handleDeregister(ctx, uri.get(1))
+                        .onSuccess(ctx::respondWithCode);
+            } else {
+                return Future.failedFuture(new ClientErrorException(
+                        HttpURLConnection.HTTP_NOT_FOUND,
+                        "request URI does not contain registration id"));
+            }
+        }
+
+        private Future<ResponseCode> handleDeregister(final CoapContext ctx, final String registrationId) {
+
+            final Device device = ctx.getAuthenticatedDevice();
+            final Span currentSpan = TracingHelper
+                    .buildChildSpan(tracer, ctx.getTracingContext(), "deregister device", getTypeName())
+                    .withTag(Tags.SPAN_KIND.getKey(), Tags.SPAN_KIND_SERVER)
+                    .withTag(TracingHelper.TAG_TENANT_ID, ctx.getTenantId())
+                    .withTag(TracingHelper.TAG_DEVICE_ID, ctx.getOriginDevice().getDeviceId())
+                    .start();
+
+            currentSpan.log(Map.of("registration ID", registrationId));
+            log.debug("processing deregistration request [tenant-id: {}, device-id: {}, registration ID: {}]",
+                    ctx.getTenantId(), ctx.getOriginDevice(), registrationId);
+            currentSpan.log("processing device de-registration");
+
+            final var deregistration = lwm2mRegistrationStore.removeRegistration(registrationId);
+            cancelCommandSubscription(deregistration.getRegistration(), deregistration.getObservations());
+
+            final Promise<ResponseCode> result = Promise.promise();
+            if (registrationId.equals(getRegistrationId(device))) {
+                sendDisconnectedTtdEvent(
+                        ctx.getTenantId(),
+                        ctx.getOriginDevice().getDeviceId(),
+                        ctx.getAuthenticatedDevice(),
+                        currentSpan.context())
+                    .map(ResponseCode.DELETED)
+                    .onComplete(result);
+            } else {
+                // device is not allowed to unregister another device
+                result.fail(new ClientErrorException(HttpURLConnection.HTTP_FORBIDDEN));
+            }
+            return result.future().onComplete(r -> currentSpan.finish());
+        }
+
+        private void cancelCommandSubscription(final Registration registration, final Collection<Observation> observations) {
+            Optional.ofNullable(commandConsumers.remove(registration.getId()))
+                .ifPresent(consumer -> {
+                    context.runOnContext(go -> {
+                        consumer.close(null)
+                            .onComplete(r -> {
+                                observations.forEach(observation -> {
+                                    final var request = new CancelObservationRequest(observation);
+                                    lwm2mRequestSender.send(registration, request, null, 30_000, null, null);
+                                });
+                            });
+                    });
+                });
+        }
+    }
+
 }
