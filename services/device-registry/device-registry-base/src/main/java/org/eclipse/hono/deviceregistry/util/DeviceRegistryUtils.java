@@ -15,6 +15,7 @@ package org.eclipse.hono.deviceregistry.util;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import org.eclipse.hono.service.management.tenant.Tenant;
+import org.eclipse.hono.util.CacheDirective;
 import org.eclipse.hono.util.RegistryManagementConstants;
 import org.eclipse.hono.util.TenantConstants;
 import org.eclipse.hono.util.TenantObject;
@@ -106,5 +107,20 @@ public class DeviceRegistryUtils {
         .ifPresent(authorities -> target.setProperty(TenantConstants.FIELD_PAYLOAD_TRUSTED_CA, authorities));
 
         return JsonObject.mapFrom(target);
+    }
+
+    /**
+     * Gets the cache directive corresponding to the given max age for the cache.
+     *
+     * @param cacheMaxAge the maximum period of time in seconds that the information
+     *                    returned by the service's operations may be cached for.
+     * @return the cache directive corresponding to the given max age for the cache.
+     */
+    public static CacheDirective getCacheDirective(final int cacheMaxAge) {
+        if (cacheMaxAge > 0) {
+            return CacheDirective.maxAgeDirective(cacheMaxAge);
+        } else {
+            return CacheDirective.noCacheDirective();
+        }
     }
 }

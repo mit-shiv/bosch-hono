@@ -31,7 +31,6 @@ import org.eclipse.hono.service.management.tenant.Tenant;
 import org.eclipse.hono.service.management.tenant.TenantManagementService;
 import org.eclipse.hono.service.tenant.TenantService;
 import org.eclipse.hono.tracing.TracingHelper;
-import org.eclipse.hono.util.CacheDirective;
 import org.eclipse.hono.util.TenantConstants;
 import org.eclipse.hono.util.TenantResult;
 import org.eclipse.hono.deviceregistry.util.Versioned;
@@ -290,7 +289,7 @@ public final class FileBasedTenantService extends AbstractVerticle implements Te
             return OperationResult.ok(
                     HttpURLConnection.HTTP_OK,
                     tenant.getValue(),
-                    Optional.ofNullable(getCacheDirective()),
+                    Optional.ofNullable(DeviceRegistryUtils.getCacheDirective(config.getCacheMaxAge())),
                     Optional.ofNullable(tenant.getVersion()));
         }
     }
@@ -306,7 +305,7 @@ public final class FileBasedTenantService extends AbstractVerticle implements Te
             return TenantResult.from(
                     HttpURLConnection.HTTP_OK,
                     DeviceRegistryUtils.convertTenant(tenantId, tenant.getValue(), true),
-                    getCacheDirective());
+                    DeviceRegistryUtils.getCacheDirective(config.getCacheMaxAge()));
         }
     }
 
@@ -335,7 +334,7 @@ public final class FileBasedTenantService extends AbstractVerticle implements Te
                 return TenantResult.from(
                         HttpURLConnection.HTTP_OK,
                         DeviceRegistryUtils.convertTenant(tenant.getKey(), tenant.getValue().getValue(), true),
-                        getCacheDirective());
+                        DeviceRegistryUtils.getCacheDirective(config.getCacheMaxAge()));
             }
         }
     }
@@ -521,14 +520,6 @@ public final class FileBasedTenantService extends AbstractVerticle implements Te
                     .filter(entry -> entry.getValue().getValue().hasTrustedCertificateAuthoritySubjectDN(subjectDn))
                     .findFirst()
                     .orElse(null);
-        }
-    }
-
-    private CacheDirective getCacheDirective() {
-        if (getConfig().getCacheMaxAge() > 0) {
-            return CacheDirective.maxAgeDirective(getConfig().getCacheMaxAge());
-        } else {
-            return CacheDirective.noCacheDirective();
         }
     }
 
