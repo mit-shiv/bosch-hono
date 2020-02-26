@@ -19,39 +19,7 @@ package org.eclipse.hono.deviceregistry.file;
  */
 public final class FileBasedRegistrationConfigProperties extends AbstractFileBasedRegistryConfigProperties {
 
-    /**
-     * The default number of devices that can be registered for each tenant.
-     */
-    public static final int DEFAULT_MAX_DEVICES_PER_TENANT = 100;
     private static final String DEFAULT_DEVICES_FILENAME = "/var/lib/hono/device-registry/device-identities.json";
-
-    private int maxDevicesPerTenant = DEFAULT_MAX_DEVICES_PER_TENANT;
-
-    /**
-     * Gets the maximum number of devices that can be registered for each tenant.
-     * <p>
-     * The default value of this property is {@link #DEFAULT_MAX_DEVICES_PER_TENANT}.
-     * 
-     * @return The maximum number of devices.
-     */
-    public int getMaxDevicesPerTenant() {
-        return maxDevicesPerTenant;
-    }
-
-    /**
-     * Sets the maximum number of devices that can be registered for each tenant.
-     * <p>
-     * The default value of this property is {@link #DEFAULT_MAX_DEVICES_PER_TENANT}.
-     * 
-     * @param maxDevices The maximum number of devices.
-     * @throws IllegalArgumentException if the number of devices is &lt;= 0.
-     */
-    public void setMaxDevicesPerTenant(final int maxDevices) {
-        if (maxDevices <= 0) {
-            throw new IllegalArgumentException("max devices must be > 0");
-        }
-        this.maxDevicesPerTenant = maxDevices;
-    }
 
     /**
      * {@inheritDoc}

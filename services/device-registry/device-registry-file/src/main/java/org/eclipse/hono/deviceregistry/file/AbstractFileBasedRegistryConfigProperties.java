@@ -13,24 +13,19 @@
 
 package org.eclipse.hono.deviceregistry.file;
 
+import org.eclipse.hono.deviceregistry.config.DeviceRegistrationCommonConfigProperties;
+
 /**
  * Common configuration properties for file based implementations of the APIs of Hono's device registry as own server.
  * <p>
  * This class is intended to be used as base class for property classes that configure a specific file based API implementation.
  */
-public abstract class AbstractFileBasedRegistryConfigProperties {
-
-    /**
-     * The default number of seconds that information returned by the service's
-     * operations may be cached for.
-     */
-    public static final int DEFAULT_MAX_AGE_SECONDS = 180;
+public abstract class AbstractFileBasedRegistryConfigProperties extends DeviceRegistrationCommonConfigProperties {
 
     private String filename = getDefaultFileName();
     private boolean saveToFile = false;
     private boolean modificationEnabled = true;
     private boolean startEmpty = false;
-    private int cacheMaxAge = DEFAULT_MAX_AGE_SECONDS;
 
     /**
      * Gets the path to the file that the registry should be persisted to periodically.
@@ -39,34 +34,6 @@ public abstract class AbstractFileBasedRegistryConfigProperties {
      * @return The path to the file.
      */
     protected abstract String getDefaultFileName();
-
-    /**
-     * Sets the maximum period of time that information returned by the service's
-     * operations may be cached for.
-     * <p>
-     * The default value of this property is {@link #DEFAULT_MAX_AGE_SECONDS} seconds.
-     * 
-     * @param maxAge The period of time in seconds.
-     * @throws IllegalArgumentException if max age is &lt; 0.
-     */
-    public final void setCacheMaxAge(final int maxAge) {
-        if (maxAge < 0) {
-            throw new IllegalArgumentException("max age must be >= 0");
-        }
-        this.cacheMaxAge = maxAge;
-    }
-
-    /**
-     * Gets the maximum period of time that information returned by the service's
-     * operations may be cached for.
-     * <p>
-     * The default value of this property is {@link #DEFAULT_MAX_AGE_SECONDS} seconds.
-     * 
-     * @return The period of time in seconds.
-     */
-    public final int getCacheMaxAge() {
-        return cacheMaxAge;
-    }
 
     /**
      * Checks whether the content of the registry should be persisted to the file system
