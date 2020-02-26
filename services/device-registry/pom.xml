@@ -16,7 +16,6 @@
     <groupId>org.eclipse.hono</groupId>
     <artifactId>hono-services</artifactId>
     <version>1.2.0-SNAPSHOT</version>
-    <relativePath>../bom</relativePath>
   </parent>
   <artifactId>hono-service-device-registry</artifactId>
   <name>Hono Device Registry</name>

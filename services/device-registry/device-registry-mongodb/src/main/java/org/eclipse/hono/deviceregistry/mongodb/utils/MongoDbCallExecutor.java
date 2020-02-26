@@ -28,9 +28,9 @@ import org.slf4j.LoggerFactory;
 /**
  * Utility for vertx mongodb client access.
  */
-public final class MongoDBCallExecutor {
+public final class MongoDbCallExecutor {
 
-    private static final Logger log = LoggerFactory.getLogger(MongoDBCallExecutor.class);
+    private static final Logger log = LoggerFactory.getLogger(MongoDbCallExecutor.class);
 
     private Vertx vertx;
     private MongoClient mongoClient;
@@ -42,7 +42,7 @@ public final class MongoDBCallExecutor {
      * @param vertx         acting vertx context
      * @param mongoDbConfig mongodb config properties
      */
-    public MongoDBCallExecutor(final Vertx vertx, final MongoDbConfigProperties mongoDbConfig) {
+    public MongoDbCallExecutor(final Vertx vertx, final MongoDbConfigProperties mongoDbConfig) {
         this.vertx = vertx;
         this.mongoDbConfig = mongoDbConfig;
         final JsonObject mongoConfigJson = this.mongoDbConfig.asMongoClientConfigJson();

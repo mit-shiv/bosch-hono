@@ -18,8 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A POJO for configuring MongoDB properties used by the
- * MongoDbBasedRegistrationService.
+ * A POJO for configuring properties of mongodb.
  */
 public class MongoDbConfigProperties {
 
