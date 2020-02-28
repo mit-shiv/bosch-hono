@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016, 2019 Contributors to the Eclipse Foundation
+ * Copyright (c) 2016, 2020 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -24,7 +24,6 @@ public abstract class AbstractFileBasedRegistryConfigProperties extends DeviceRe
 
     private String filename = getDefaultFileName();
     private boolean saveToFile = false;
-    private boolean modificationEnabled = true;
     private boolean startEmpty = false;
 
     /**
@@ -58,32 +57,6 @@ public abstract class AbstractFileBasedRegistryConfigProperties extends DeviceRe
      */
     public final void setSaveToFile(final boolean enabled) {
         this.saveToFile = enabled;
-    }
-
-    /**
-     * Checks whether this registry allows the creation, modification and removal of entries.
-     * <p>
-     * If set to {@code false} then methods for creating, updating or deleting an entry should return a <em>403 Forbidden</em> response.
-     * <p>
-     * The default value of this property is {@code true}.
-     *
-     * @return The flag.
-     */
-    public final boolean isModificationEnabled() {
-        return modificationEnabled;
-    }
-
-    /**
-     * Sets whether this registry allows creation, modification and removal of entries.
-     * <p>
-     * If set to {@code false} then for creating, updating or deleting an entry should return a <em>403 Forbidden</em> response.
-     * <p>
-     * The default value of this property is {@code true}.
-     *
-     * @param flag The flag.
-     */
-    public final void setModificationEnabled(final boolean flag) {
-        modificationEnabled = flag;
     }
 
     /**

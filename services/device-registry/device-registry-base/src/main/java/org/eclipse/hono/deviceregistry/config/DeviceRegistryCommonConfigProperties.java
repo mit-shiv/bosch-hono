@@ -24,6 +24,7 @@ public class DeviceRegistryCommonConfigProperties {
      */
     public static final int DEFAULT_MAX_AGE_SECONDS = 180;
     private int cacheMaxAge = DEFAULT_MAX_AGE_SECONDS;
+    private boolean modificationEnabled = true;
 
     /**
      * Sets the maximum period of time that information returned by the service's
@@ -53,4 +54,29 @@ public class DeviceRegistryCommonConfigProperties {
         return cacheMaxAge;
     }
 
+    /**
+     * Checks whether this registry allows the creation, modification and removal of entries.
+     * <p>
+     * If set to {@code false} then methods for creating, updating or deleting an entry should return a <em>403 Forbidden</em> response.
+     * <p>
+     * The default value of this property is {@code true}.
+     *
+     * @return The flag.
+     */
+    public final boolean isModificationEnabled() {
+        return modificationEnabled;
+    }
+
+    /**
+     * Sets whether this registry allows creation, modification and removal of entries.
+     * <p>
+     * If set to {@code false} then for creating, updating or deleting an entry should return a <em>403 Forbidden</em> response.
+     * <p>
+     * The default value of this property is {@code true}.
+     *
+     * @param flag The flag.
+     */
+    public final void setModificationEnabled(final boolean flag) {
+        modificationEnabled = flag;
+    }
 }
