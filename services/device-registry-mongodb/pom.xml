@@ -11,12 +11,12 @@
    
     SPDX-License-Identifier: EPL-2.0
  -->
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns="http://maven.apache.org/POM/4.0.0"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <parent>
+        <artifactId>hono-service-device-registry</artifactId>
         <groupId>org.eclipse.hono</groupId>
-        <artifactId>hono-services</artifactId>
         <version>1.2.0-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
@@ -37,6 +37,16 @@
             <groupId>io.vertx</groupId>
             <artifactId>vertx-mongo-client</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-inline</artifactId>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -89,8 +99,11 @@
                                                 <arg>-Dvertx.cacheDirBase=/tmp</arg>
                                                 <arg>-Dloader.home=/opt/hono</arg>
                                                 <arg>-Dloader.path=extensions</arg>
+                                                <arg>-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:8000</arg>
                                                 <arg>-cp</arg>
-                                                <arg>/opt/hono/${project.artifactId}-${project.version}-${classifier.spring.boot.artifact}.jar</arg>
+                                                <arg>
+                                                    /opt/hono/${project.artifactId}-${project.version}-${classifier.spring.boot.artifact}.jar
+                                                </arg>
                                                 <arg>org.springframework.boot.loader.PropertiesLauncher</arg>
                                             </exec>
                                         </cmd>
@@ -103,7 +116,9 @@
                                                         <directory>${project.build.directory}</directory>
                                                         <outputDirectory>opt/hono</outputDirectory>
                                                         <includes>
-                                                            <include>${project.artifactId}-${project.version}-${classifier.spring.boot.artifact}.jar</include>
+                                                            <include>
+                                                                ${project.artifactId}-${project.version}-${classifier.spring.boot.artifact}.jar
+                                                            </include>
                                                         </includes>
                                                     </fileSet>
                                                 </fileSets>

@@ -22,7 +22,7 @@ import java.time.Instant;
 /**
  * TODO.
  */
-public class TenantDto extends BaseDto{
+public class TenantDto extends BaseDto {
 
     @JsonProperty(RegistryManagementConstants.FIELD_PAYLOAD_TENANT_ID)
     private String tenantId;

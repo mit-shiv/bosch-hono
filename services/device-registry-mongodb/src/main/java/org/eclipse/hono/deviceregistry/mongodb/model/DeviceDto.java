@@ -47,7 +47,7 @@ public class DeviceDto extends BaseDto {
      * @param updatedOn TODO.
      */
     public DeviceDto(final String tenantId, final String deviceId, final Device device, final String version,
-            final Instant updatedOn) {
+                     final Instant updatedOn) {
         this.tenantId = tenantId;
         this.deviceId = deviceId;
         this.device = device;
