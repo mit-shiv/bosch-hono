@@ -214,6 +214,10 @@ public final class RegistryManagementConstants extends RequestResponseApiConstan
      */
     public static final String FIELD_ADAPTERS_DEVICE_AUTHENTICATION_REQUIRED = "device-authentication-required";
     /**
+     * The name of the JSON property containing the device identifier.
+     */
+    public static final String FIELD_DEVICE = "device";
+    /**
      * The name of the JSON array containing device registration information for a tenant.
      */
     public static final String FIELD_DEVICES = "devices";
