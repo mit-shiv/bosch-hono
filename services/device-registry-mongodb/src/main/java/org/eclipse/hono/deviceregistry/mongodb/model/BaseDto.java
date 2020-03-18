@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.util.Objects;
 
 import org.eclipse.hono.annotation.HonoTimestamp;
+import org.eclipse.hono.util.RegistryManagementConstants;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -26,11 +27,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class BaseDto {
+public abstract class BaseDto {
 
-    @JsonProperty(value = "version", required = true)
+    @JsonProperty(value = RegistryManagementConstants.FIELD_VERSION, required = true)
     protected String version;
-    @JsonProperty("updatedOn")
+    @JsonProperty(value = RegistryManagementConstants.FIELD_UPDATED_ON, required = true)
     @HonoTimestamp
     protected Instant updatedOn;
 
@@ -46,7 +47,7 @@ public class BaseDto {
      * 
      * @return The version of the document or {@code null} if not set.
      */
-    public String getVersion() {
+    public final String getVersion() {
         return version;
     }
 
@@ -56,7 +57,7 @@ public class BaseDto {
      * @param version The version of the document.
      * @throws NullPointerException if the version is {@code null}.
      */
-    public void setVersion(final String version) {
+    public final void setVersion(final String version) {
         this.version = Objects.requireNonNull(version);
     }
 
@@ -65,7 +66,7 @@ public class BaseDto {
      *
      * @return The date and time of last modification.
      */
-    public Instant getUpdatedOn() {
+    public final Instant getUpdatedOn() {
         return updatedOn;
     }
 
@@ -75,7 +76,7 @@ public class BaseDto {
      * @param updatedOn The date and time of last modification.
      * @throws NullPointerException if the last modification date and time is {@code null}.
      */
-    public void setUpdatedOn(final Instant updatedOn) {
+    public final void setUpdatedOn(final Instant updatedOn) {
         this.updatedOn = Objects.requireNonNull(updatedOn);
     }
 }

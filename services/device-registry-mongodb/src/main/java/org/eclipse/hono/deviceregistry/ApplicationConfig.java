@@ -182,9 +182,8 @@ public class ApplicationConfig {
      *
      * @return The properties.
      */
-    @Qualifier(Constants.QUALIFIER_REST)
     @Bean
-    @ConfigurationProperties(prefix = "hono.registry.rest")
+    @ConfigurationProperties(prefix = "hono.registry.http")
     public ServiceConfigProperties httpServerProperties() {
         final ServiceConfigProperties props = new ServiceConfigProperties();
         return props;

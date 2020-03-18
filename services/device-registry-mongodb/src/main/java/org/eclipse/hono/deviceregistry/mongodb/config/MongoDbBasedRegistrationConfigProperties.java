@@ -18,17 +18,21 @@ package org.eclipse.hono.deviceregistry.mongodb.config;
 public final class MongoDbBasedRegistrationConfigProperties extends AbstractMongoDbBasedRegistryConfigProperties {
 
     /**
-     * The default number of devices that can be registered for each tenant.
+     * The value indicating an <em>unlimited</em> number of devices to be allowed for a tenant.
      */
-    public static final int DEFAULT_MAX_DEVICES_PER_TENANT = 100;
+    public static final int UNLIMITED_DEVICES_PER_TENANT = -1;
+
+    /**
+     * The name of the mongodb collection where devices information are stored.
+     */
     private static final String DEFAULT_DEVICE_COLLECTION_NAME = "devices";
 
-    private int maxDevicesPerTenant = DEFAULT_MAX_DEVICES_PER_TENANT;
+    private int maxDevicesPerTenant = UNLIMITED_DEVICES_PER_TENANT;
 
     /**
      * Gets the maximum number of devices that can be registered for each tenant.
      * <p>
-     * The default value of this property is {@link #DEFAULT_MAX_DEVICES_PER_TENANT}.
+     * The default value of this property is {@link #UNLIMITED_DEVICES_PER_TENANT}.
      *
      * @return The maximum number of devices.
      */
@@ -39,14 +43,16 @@ public final class MongoDbBasedRegistrationConfigProperties extends AbstractMong
     /**
      * Sets the maximum number of devices that can be registered for each tenant.
      * <p>
-     * The default value of this property is {@link #DEFAULT_MAX_DEVICES_PER_TENANT}.
+     * The default value of this property is {@link #UNLIMITED_DEVICES_PER_TENANT}.
      *
      * @param maxDevices The maximum number of devices.
-     * @throws IllegalArgumentException if the number of devices is &lt;= 0.
+     * @throws IllegalArgumentException if the number of devices is is set to less
+     *                                  than {@link #UNLIMITED_DEVICES_PER_TENANT}.
      */
     public void setMaxDevicesPerTenant(final int maxDevices) {
-        if (maxDevices <= 0) {
-            throw new IllegalArgumentException("max devices must be > 0");
+        if (maxDevices < UNLIMITED_DEVICES_PER_TENANT) {
+            throw new IllegalArgumentException(
+                    String.format("Maximum devices must be set to value >= %s", UNLIMITED_DEVICES_PER_TENANT));
         }
         this.maxDevicesPerTenant = maxDevices;
     }

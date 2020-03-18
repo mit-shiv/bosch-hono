@@ -16,7 +16,6 @@ import java.net.HttpURLConnection;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.UUID;
 
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedRegistrationConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.model.DeviceDto;
@@ -39,7 +38,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import com.mongodb.ErrorCategory;
@@ -65,8 +63,7 @@ import io.vertx.ext.mongo.MongoClientUpdateResult;
  */
 @Component
 @Qualifier("serviceImpl")
-@ConditionalOnProperty(name = "hono.app.type", havingValue = "mongodb", matchIfMissing = true)
-public class MongoDbBasedRegistrationService extends AbstractVerticle
+public final class MongoDbBasedRegistrationService extends AbstractVerticle
         implements DeviceManagementService, RegistrationService {
 
     private static final Logger log = LoggerFactory.getLogger(MongoDbBasedRegistrationService.class);
@@ -98,18 +95,30 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
      * Creates an instance of the {@link MongoDbCallExecutor}.
      *
      * @param mongoDbCallExecutor An instance of the mongoDbCallExecutor.
+     * @throws NullPointerException if the mongoDbCallExecutor is {@code null}.
      */
     @Autowired
     public void setExecutor(final MongoDbCallExecutor mongoDbCallExecutor) {
-        this.mongoDbCallExecutor = mongoDbCallExecutor;
+        this.mongoDbCallExecutor = Objects.requireNonNull(mongoDbCallExecutor);
         this.mongoClient = this.mongoDbCallExecutor.getMongoClient();
     }
 
+    /**
+     * Sets the configuration properties for this service.
+     *
+     * @param config The configuration properties.
+     * @throws NullPointerException if the config is {@code null}.
+     */
     @Autowired
     public void setConfig(final MongoDbBasedRegistrationConfigProperties config) {
-        this.config = config;
+        this.config = Objects.requireNonNull(config);
     }
 
+    /**
+     * Gets the configuration properties for this service.
+     *
+     * @return The configuration properties.
+     */
     public MongoDbBasedRegistrationConfigProperties getConfig() {
         return config;
     }
@@ -117,7 +126,7 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
     @Override
     public void start(final Promise<Void> startPromise) {
 
-        mongoDbCallExecutor.createCollectionIndex(getConfig().getCollectionName(),
+        mongoDbCallExecutor.createCollectionIndex(config.getCollectionName(),
                 new JsonObject().put(RegistrationConstants.FIELD_PAYLOAD_TENANT_ID, 1)
                         .put(RegistrationConstants.FIELD_PAYLOAD_DEVICE_ID, 1),
                 new IndexOptions().unique(true))
@@ -144,16 +153,18 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
         Objects.requireNonNull(tenantId);
         Objects.requireNonNull(deviceId);
 
-        final String deviceIdValue = deviceId.orElse(UUID.randomUUID().toString());
+        final String deviceIdValue = deviceId.orElse(DeviceRegistryUtils.getUniqueIdentifier());
         final Versioned<Device> versionedDevice = new Versioned<>(device);
         final DeviceDto deviceDto = new DeviceDto(tenantId, deviceIdValue, versionedDevice.getValue(),
                 versionedDevice.getVersion(), Instant.now());
 
         final Promise<Long> findExistingNoOfDevicesPromise = Promise.promise();
-        mongoClient.count(getConfig().getCollectionName(), new JsonObject(), findExistingNoOfDevicesPromise);
+        mongoClient.count(config.getCollectionName(), new JsonObject(), findExistingNoOfDevicesPromise);
         return findExistingNoOfDevicesPromise.future()
                 .compose(existingNoOfDevices -> {
-                    if (existingNoOfDevices >= getConfig().getMaxDevicesPerTenant()) {
+                    if (getConfig()
+                            .getMaxDevicesPerTenant() != MongoDbBasedRegistrationConfigProperties.UNLIMITED_DEVICES_PER_TENANT
+                            && existingNoOfDevices >= config.getMaxDevicesPerTenant()) {
                         log.debug("Maximum number of devices limit already reached for the tenant [{}]", tenantId);
                         TracingHelper.logError(span, String.format(
                                 "Maximum number of devices limit already reached for the tenant [%s]", tenantId));
@@ -181,7 +192,7 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
         Objects.requireNonNull(tenantId);
         Objects.requireNonNull(deviceId);
 
-        if (!getConfig().isModificationEnabled()) {
+        if (!config.isModificationEnabled()) {
             final String errorMsg = String.format("Modification is disabled for tenant [%s]", tenantId);
             TracingHelper.logError(span, errorMsg);
             log.debug(errorMsg);
@@ -193,7 +204,7 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
         final DeviceDto deviceDto = new DeviceDto(tenantId, deviceId, versionedDevice.getValue(),
                 versionedDevice.getVersion(), Instant.now());
 
-        return ProcessUpdateDevice(tenantId, deviceId, deviceDto, span);
+        return processUpdateDevice(tenantId, deviceId, deviceDto, span);
     }
 
     @Override
@@ -243,9 +254,9 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
         final JsonObject findDeviceQuery = new MongoDbDocumentBuilder()
                 .withTenantId(tenantId)
                 .withDeviceId(deviceId)
-                .create();
+                .document();
         final Promise<JsonObject> readDevicePromise = Promise.promise();
-        mongoClient.findOne(getConfig().getCollectionName(), findDeviceQuery, null, readDevicePromise);
+        mongoClient.findOne(config.getCollectionName(), findDeviceQuery, null, readDevicePromise);
         return readDevicePromise.future()
                 .compose(result -> Optional.ofNullable(result)
                         .map(ok -> result.mapTo(DeviceDto.class))
@@ -264,7 +275,7 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
 
     }
 
-    private boolean ifDuplicateKeyError(final Throwable throwable) {
+    private boolean isDuplicateKeyError(final Throwable throwable) {
         if (throwable instanceof MongoException) {
             final MongoException mongoException = (MongoException) throwable;
             return ErrorCategory.fromErrorCode(mongoException.getCode()) == ErrorCategory.DUPLICATE_KEY;
@@ -274,7 +285,7 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
 
     private Future<OperationResult<Id>> processCreateDevice(final DeviceDto device, final Span span) {
         final Promise<String> addDevicePromise = Promise.promise();
-        mongoClient.insert(getConfig().getCollectionName(), JsonObject.mapFrom(device), addDevicePromise);
+        mongoClient.insert(config.getCollectionName(), JsonObject.mapFrom(device), addDevicePromise);
         return addDevicePromise.future()
                 .map(success -> OperationResult.ok(
                         HttpURLConnection.HTTP_CREATED,
@@ -282,7 +293,7 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
                         Optional.empty(),
                         Optional.of(device.getVersion())))
                 .recover(error -> {
-                    if (ifDuplicateKeyError(error)) {
+                    if (isDuplicateKeyError(error)) {
                         log.debug("Device [{}] already exists for the tenant [{}]", device.getDeviceId(),
                                 device.getTenantId(), error);
                         TracingHelper.logError(span, String.format("Device [%s] already exists for the tenant [%s]",
@@ -304,8 +315,8 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
         final JsonObject removeDeviceQuery = new MongoDbDocumentBuilder()
                 .withTenantId(tenantId)
                 .withDeviceId(deviceId)
-                .create();
-        mongoClient.removeDocument(getConfig().getCollectionName(), removeDeviceQuery, deleteDevicePromise);
+                .document();
+        mongoClient.removeDocument(config.getCollectionName(), removeDeviceQuery, deleteDevicePromise);
         return deleteDevicePromise.future()
                 .compose(successDeleteDevice -> {
                     if (successDeleteDevice.getRemovedCount() == 1) {
@@ -327,7 +338,7 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
                                         HttpURLConnection.HTTP_OK,
                                         deviceDto.getDevice(),
                                         Optional.ofNullable(
-                                                DeviceRegistryUtils.getCacheDirective(getConfig().getCacheMaxAge())),
+                                                DeviceRegistryUtils.getCacheDirective(config.getCacheMaxAge())),
                                         Optional.ofNullable(deviceDto.getVersion()))))
                         .orElseGet(() -> {
                             TracingHelper.logError(span, String.format("Device [%s] not found.", deviceId));
@@ -335,14 +346,14 @@ public class MongoDbBasedRegistrationService extends AbstractVerticle
                         }));
     }
 
-    private Future<OperationResult<Id>> ProcessUpdateDevice(final String tenantId, final String deviceId,
+    private Future<OperationResult<Id>> processUpdateDevice(final String tenantId, final String deviceId,
             final DeviceDto deviceDto, final Span span) {
         final JsonObject updateDeviceQuery = new MongoDbDocumentBuilder()
                 .withTenantId(tenantId)
                 .withDeviceId(deviceId)
-                .create();
+                .document();
         final Promise<MongoClientUpdateResult> updateDevicePromise = Promise.promise();
-        mongoClient.updateCollection(getConfig().getCollectionName(), updateDeviceQuery,
+        mongoClient.updateCollection(config.getCollectionName(), updateDeviceQuery,
                 new JsonObject().put("$set", JsonObject.mapFrom(deviceDto)), updateDevicePromise);
         return updateDevicePromise.future()
                 .map(updateResult -> {

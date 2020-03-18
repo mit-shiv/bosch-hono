@@ -35,7 +35,6 @@ import org.eclipse.hono.util.CredentialsResult;
 import org.eclipse.hono.util.RegistrationResult;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 import com.google.common.base.MoreObjects;
@@ -52,7 +51,6 @@ import io.vertx.core.json.JsonObject;
  */
 @Repository
 @Qualifier("backend")
-@ConditionalOnProperty(name = "hono.app.type", havingValue = "mongodb", matchIfMissing = true)
 public class MongoDbBasedDeviceBackend implements AutoProvisioningEnabledDeviceBackend {
 
     private final MongoDbBasedRegistrationService registrationService;

@@ -20,7 +20,7 @@ import io.vertx.core.json.JsonObject;
 /**
  * Utility class for building Json documents for mongodb.
  */
-public class MongoDbDocumentBuilder {
+public final class MongoDbDocumentBuilder {
 
     private final JsonObject document = new JsonObject();
 
@@ -47,11 +47,11 @@ public class MongoDbDocumentBuilder {
     }
 
     /**
-     * Returns the json object.
+     * Returns the json document.
      * 
      * @return the json document.
      */
-    public JsonObject create() {
+    public JsonObject document() {
         return document;
     }
 }
