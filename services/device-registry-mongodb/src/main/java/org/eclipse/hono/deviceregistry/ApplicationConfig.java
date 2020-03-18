@@ -20,6 +20,7 @@ import org.eclipse.hono.config.ServerConfig;
 import org.eclipse.hono.config.ServiceConfigProperties;
 import org.eclipse.hono.config.VertxProperties;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedRegistrationConfigProperties;
+import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedTenantsConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.service.MongoDbBasedRegistrationService;
 import org.eclipse.hono.deviceregistry.mongodb.utils.MongoDbCallExecutor;
@@ -146,7 +147,7 @@ public class ApplicationConfig {
 
     /**
      * Creates a new instance of an AMQP 1.0 protocol handler for Hono's <em>Credentials</em> API.
-     * 
+     *
      * @return The handler.
      */
     @Bean
@@ -258,6 +259,17 @@ public class ApplicationConfig {
     @ConfigurationProperties(prefix = "hono.registry.svc")
     public MongoDbBasedRegistrationConfigProperties serviceProperties() {
         return new MongoDbBasedRegistrationConfigProperties();
+    }
+
+    /**
+     * Gets properties for the hono tenant mongodb service.
+     *
+     * @return The properties.
+     */
+    @Bean
+    @ConfigurationProperties(prefix = "hono.tenant.svc")
+    public MongoDbBasedTenantsConfigProperties tenantsProperties() {
+        return new MongoDbBasedTenantsConfigProperties();
     }
 
     /**
