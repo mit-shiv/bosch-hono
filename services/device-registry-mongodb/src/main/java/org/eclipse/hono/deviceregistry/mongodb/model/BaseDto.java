@@ -27,7 +27,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public abstract class BaseDto {
+public class BaseDto {
 
     @JsonProperty(value = MongoDbDeviceRegistryUtils.FIELD_VERSION, required = true)
     private String version;

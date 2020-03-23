@@ -20,6 +20,7 @@ import org.eclipse.hono.config.ServerConfig;
 import org.eclipse.hono.config.ServiceConfigProperties;
 import org.eclipse.hono.config.VertxProperties;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedRegistrationConfigProperties;
+import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedTenantsConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.service.MongoDbBasedRegistrationService;
 import org.eclipse.hono.deviceregistry.mongodb.utils.MongoDbCallExecutor;
@@ -60,9 +61,8 @@ public class ApplicationConfig {
     /**
      * Exposes a Vert.x instance as a Spring bean.
      * <p>
-     * This method creates new Vert.x default options and invokes
-     * {@link VertxProperties#configureVertx(VertxOptions)} on the object returned
-     * by {@link #vertxProperties()}.
+     * This method creates new Vert.x default options and invokes {@link VertxProperties#configureVertx(VertxOptions)}
+     * on the object returned by {@link #vertxProperties()}.
      *
      * @return The Vert.x instance.
      */
@@ -85,9 +85,8 @@ public class ApplicationConfig {
     /**
      * Exposes an OpenTracing {@code Tracer} as a Spring Bean.
      * <p>
-     * The Tracer will be resolved by means of a Java service lookup.
-     * If no tracer can be resolved this way, the {@code NoopTracer} is
-     * returned.
+     * The Tracer will be resolved by means of a Java service lookup. If no tracer can be resolved this way,
+     * the {@code NoopTracer} is returned.
      *
      * @return The tracer.
      */
@@ -129,8 +128,7 @@ public class ApplicationConfig {
     @Bean
     @ConfigurationProperties(prefix = "hono.registry.amqp")
     public ServiceConfigProperties amqpServerProperties() {
-        final ServiceConfigProperties props = new ServiceConfigProperties();
-        return props;
+        return new ServiceConfigProperties();
     }
 
     /**
@@ -190,8 +188,8 @@ public class ApplicationConfig {
     }
 
     /**
-     * Creates a new instance of an HTTP protocol handler for the <em>devices</em> resources
-     * of Hono's Device Registry Management API's.
+     * Creates a new instance of an HTTP protocol handler for
+     * the <em>devices</em> resources of Hono's Device Registry Management API's.
      *
      * @return The handler.
      */
@@ -202,8 +200,8 @@ public class ApplicationConfig {
     }
 
     /**
-     * Creates a new instance of an HTTP protocol handler for the <em>credentials</em> resources
-     * of Hono's Device Registry Management API's.
+     * Creates a new instance of an HTTP protocol handler for
+     * the <em>credentials</em> resources of Hono's Device Registry Management API's.
      *
      * @return The handler.
      */
@@ -214,8 +212,8 @@ public class ApplicationConfig {
     }
 
     /**
-     * Creates a new instance of an HTTP protocol handler for the <em>tenants</em> resources
-     * of Hono's Device Registry Management API's.
+     * Creates a new instance of an HTTP protocol handler for
+     * the <em>tenants</em> resources of Hono's Device Registry Management API's.
      *
      * @return The handler.
      */
@@ -249,8 +247,8 @@ public class ApplicationConfig {
     }
 
     /**
-     * Gets properties for configuring {@link MongoDbBasedRegistrationService} which implements the <em>Device
-     * Registration</em> API.
+     * Gets properties for configuring {@link MongoDbBasedRegistrationService} which implements
+     * the <em>Device Registration</em> API.
      *
      * @return The properties.
      */
@@ -258,6 +256,18 @@ public class ApplicationConfig {
     @ConfigurationProperties(prefix = "hono.registry.svc")
     public MongoDbBasedRegistrationConfigProperties serviceProperties() {
         return new MongoDbBasedRegistrationConfigProperties();
+    }
+
+    /**
+     * Gets properties for configuring {@link MongoDbBasedTenantsConfigProperties} which implements
+     * the <em>Tenant Service</em> API.
+     *
+     * @return The properties.
+     */
+    @Bean
+    @ConfigurationProperties(prefix = "hono.tenant.svc")
+    public MongoDbBasedTenantsConfigProperties tenantsProperties() {
+        return new MongoDbBasedTenantsConfigProperties();
     }
 
     /**

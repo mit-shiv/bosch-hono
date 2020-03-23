@@ -14,10 +14,12 @@ package org.eclipse.hono.deviceregistry.mongodb.utils;
 
 import java.net.HttpURLConnection;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.ServiceInvocationException;
 import org.eclipse.hono.deviceregistry.mongodb.config.AbstractMongoDbBasedRegistryConfigProperties;
+import org.eclipse.hono.deviceregistry.mongodb.model.BaseDto;
 import org.eclipse.hono.service.management.OperationResult;
 import org.eclipse.hono.tracing.TracingHelper;
 import org.slf4j.Logger;
@@ -25,6 +27,9 @@ import org.slf4j.LoggerFactory;
 
 import io.opentracing.Span;
 import io.vertx.core.Future;
+
+import com.mongodb.ErrorCategory;
+import com.mongodb.MongoException;
 
 /**
  * A collection of constants and utility methods for implementing the mongodb based device registry.
@@ -97,4 +102,43 @@ public final class MongoDbDeviceRegistryUtils {
         }
         return OperationResult.empty(HttpURLConnection.HTTP_INTERNAL_ERROR);
     }
+
+    /**
+     * Checks if a provided error is {@link MongoException} with error category {@link ErrorCategory#DUPLICATE_KEY}.
+     *
+     * @param throwable The exception to check. Other Throwables but {@link MongoException} return {@code false}.
+     * @return {@code true} if exception is an {@link ErrorCategory#DUPLICATE_KEY} exception.
+     */
+    public static boolean ifDuplicateKeyError(final Throwable throwable) {
+        if (throwable instanceof MongoException) {
+            final MongoException mongoException = (MongoException) throwable;
+            return ErrorCategory.fromErrorCode(mongoException.getCode()) == ErrorCategory.DUPLICATE_KEY;
+        }
+        return false;
+    }
+
+    /**
+     * Checks if this version matches the provided version.
+     *
+     * @param <T> The type of the resource.
+     * @param resourceDto The data transfer object of the resource.
+     * @param resourceVersion The version of the resource to be matched with that of the existing one.
+     * @return A future indicating the outcome of the operation.
+     *         <p>
+     *         The future will succeed if the version matches. Otherwise the future will fail with a
+     *         {@link ServiceInvocationException}.
+     * @throws NullPointerException if any of the parameters is {@code null}.
+     */
+    public static <T extends BaseDto> Future<T> checkResourceVersion(final T resourceDto,
+            final Optional<String> resourceVersion) {
+        Objects.requireNonNull(resourceDto);
+
+        if (resourceVersion.isEmpty() || resourceVersion.get().equals(resourceDto.getVersion())) {
+            return Future.succeededFuture(resourceDto);
+        }
+        return Future.failedFuture(
+                new ClientErrorException(HttpURLConnection.HTTP_PRECON_FAILED, "Resource version mismatch"));
+    }
+
+
 }
