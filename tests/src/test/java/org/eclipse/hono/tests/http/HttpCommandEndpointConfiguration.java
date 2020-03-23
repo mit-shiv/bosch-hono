@@ -29,14 +29,14 @@ public final class HttpCommandEndpointConfiguration extends CommandEndpointConfi
      * 
      * @param subscriberRole The way in which to subscribe for commands.
      */
-    public HttpCommandEndpointConfiguration(final SubscriberRole subscriberRole) {
+    public HttpCommandEndpointConfiguration(final ClientType subscriberRole) {
         super(subscriberRole);
     }
 
     String getCommandResponseUri(final String tenantId, final String deviceId, final String reqId) {
-        if (isSubscribeAsGateway()) {
-            return String.format("/%s/res/%s/%s/%s", getSouthboundEndpoint(), tenantId, deviceId, reqId);
+        if (isGatewayClient()) {
+            return String.format("/%s/res/%s/%s/%s", getSouthboundCommandEndpoint(), tenantId, deviceId, reqId);
         }
-        return String.format("/%s/res/%s", getSouthboundEndpoint(), reqId);
+        return String.format("/%s/res/%s", getSouthboundCommandEndpoint(), reqId);
     }
 }

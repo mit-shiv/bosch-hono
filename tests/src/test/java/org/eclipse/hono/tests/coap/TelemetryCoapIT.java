@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2019 Contributors to the Eclipse Foundation
+ * Copyright (c) 2019, 2020 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -13,32 +13,17 @@
 
 package org.eclipse.hono.tests.coap;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
-import java.io.IOException;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import org.apache.qpid.proton.message.Message;
-import org.eclipse.californium.core.CoapClient;
-import org.eclipse.californium.core.coap.CoAP.Code;
-import org.eclipse.californium.core.coap.CoAP.ResponseCode;
-import org.eclipse.californium.core.coap.CoAP.Type;
-import org.eclipse.californium.core.coap.OptionSet;
-import org.eclipse.californium.core.coap.Request;
-import org.eclipse.californium.elements.exception.ConnectorException;
 import org.eclipse.hono.client.MessageConsumer;
-import org.eclipse.hono.service.management.tenant.Tenant;
-import org.eclipse.hono.tests.IntegrationTestSupport;
-import org.eclipse.hono.util.TelemetryConstants;
-import org.junit.jupiter.api.Test;
+import org.eclipse.hono.tests.CommandEndpointConfiguration.ClientType;
+import org.eclipse.hono.tests.CommandEndpointConfiguration.TelemetryEndpoint;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
-import io.vertx.junit5.Timeout;
 import io.vertx.junit5.VertxExtension;
-import io.vertx.junit5.VertxTestContext;
 
 
 /**
@@ -48,82 +33,82 @@ import io.vertx.junit5.VertxTestContext;
 @ExtendWith(VertxExtension.class)
 public class TelemetryCoapIT extends CoapTestBase {
 
-    private static final String POST_URI = "/" + TelemetryConstants.TELEMETRY_ENDPOINT;
-    private static final String PUT_URI_TEMPLATE = POST_URI + "/%s/%s";
+    /**
+     * Creates the endpoint configuration variants for Command &amp; Control scenarios.
+     * 
+     * @return The configurations.
+     */
+    static Stream<CoapCommandEndpointConfiguration> commandAndControlVariants() {
+        return Stream.of(
+                new CoapCommandEndpointConfiguration(ClientType.DEVICE, TelemetryEndpoint.TELEMETRY_AT_MOST_ONCE),
+                new CoapCommandEndpointConfiguration(ClientType.GATEWAY_FOR_ALL_DEVICES, TelemetryEndpoint.TELEMETRY_AT_MOST_ONCE),
+                new CoapCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE, TelemetryEndpoint.TELEMETRY_AT_MOST_ONCE),
+
+                new CoapCommandEndpointConfiguration(ClientType.DEVICE, TelemetryEndpoint.TELEMETRY_AT_LEAST_ONCE),
+                new CoapCommandEndpointConfiguration(ClientType.GATEWAY_FOR_ALL_DEVICES, TelemetryEndpoint.TELEMETRY_AT_LEAST_ONCE),
+                new CoapCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE, TelemetryEndpoint.TELEMETRY_AT_LEAST_ONCE)
+                );
+    }
+
+    /**
+     * Creates the endpoint configuration variants for scenarios where
+     * authenticated devices upload telemetry data.
+     * 
+     * @return The configurations.
+     */
+    static Stream<CoapCommandEndpointConfiguration> authenticatedDeviceTelemetryVariants() {
+        return Stream.of(
+                new CoapCommandEndpointConfiguration(ClientType.DEVICE, TelemetryEndpoint.TELEMETRY_AT_MOST_ONCE, true),
+                new CoapCommandEndpointConfiguration(ClientType.DEVICE, TelemetryEndpoint.TELEMETRY_AT_LEAST_ONCE, true)
+                );
+    }
+
+    /**
+     * Creates the endpoint configuration variants for scenarios where
+     * devices upload telemetry data.
+     * 
+     * @return The configurations.
+     */
+    static Stream<CoapCommandEndpointConfiguration> deviceTelemetryVariants() {
+        return Stream.of(
+                new CoapCommandEndpointConfiguration(ClientType.DEVICE, TelemetryEndpoint.TELEMETRY_AT_MOST_ONCE, true),
+                new CoapCommandEndpointConfiguration(ClientType.DEVICE, TelemetryEndpoint.TELEMETRY_AT_MOST_ONCE, false),
+                new CoapCommandEndpointConfiguration(ClientType.DEVICE, TelemetryEndpoint.TELEMETRY_AT_LEAST_ONCE, true),
+                new CoapCommandEndpointConfiguration(ClientType.DEVICE, TelemetryEndpoint.TELEMETRY_AT_LEAST_ONCE, false)
+                );
+    }
+
+    /**
+     * Creates the endpoint configuration variants for scenarios where
+     * gateways upload telemetry data on behalf of devices.
+     * 
+     * @return The configurations.
+     */
+    static Stream<CoapCommandEndpointConfiguration> authenticatedGatewayTelemetryVariants() {
+        return Stream.of(
+                new CoapCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE, TelemetryEndpoint.TELEMETRY_AT_MOST_ONCE, true),
+                new CoapCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE, TelemetryEndpoint.TELEMETRY_AT_LEAST_ONCE, true)
+                );
+    }
+
+    /**
+     * Creates the endpoint configuration variants for scenarios where
+     * gateways upload telemetry data on behalf of devices.
+     * 
+     * @return The configurations.
+     */
+    static Stream<CoapCommandEndpointConfiguration> gatewayTelemetryVariants() {
+        return Stream.of(
+                new CoapCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE, TelemetryEndpoint.TELEMETRY_AT_MOST_ONCE, true),
+                new CoapCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE, TelemetryEndpoint.TELEMETRY_AT_MOST_ONCE, false),
+                new CoapCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE, TelemetryEndpoint.TELEMETRY_AT_LEAST_ONCE, true),
+                new CoapCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE, TelemetryEndpoint.TELEMETRY_AT_LEAST_ONCE, false)
+                );
+    }
 
     @Override
     protected Future<MessageConsumer> createConsumer(final String tenantId, final Consumer<Message> messageConsumer) {
 
         return helper.applicationClientFactory.createTelemetryConsumer(tenantId, messageConsumer, remoteClose -> {});
-    }
-
-    @Override
-    protected String getPutResource(final String tenant, final String deviceId) {
-        return String.format(PUT_URI_TEMPLATE, tenant, deviceId);
-    }
-
-    @Override
-    protected String getPostResource() {
-        return POST_URI;
-    }
-
-    @Override
-    protected Type getMessageType() {
-        return Type.NON;
-    }
-
-    /**
-     * Verifies that a number of telemetry messages uploaded to Hono's CoAP adapter
-     * using QoS 1 can be successfully consumed via the AMQP Messaging Network.
-     * 
-     * @param ctx The test context.
-     * @throws InterruptedException if the test fails.
-     */
-    @Test
-    public void testUploadUsingQoS1(final VertxTestContext ctx) throws InterruptedException {
-
-        final Tenant tenant = new Tenant();
-
-        final VertxTestContext setup = new VertxTestContext();
-        helper.registry.addPskDeviceForTenant(tenantId, tenant, deviceId, SECRET)
-        .setHandler(setup.completing());
-        ctx.verify(() -> assertThat(setup.awaitCompletion(5, TimeUnit.SECONDS)).isTrue());
-
-        final CoapClient client = getCoapsClient(deviceId, tenantId, SECRET);
-
-        testUploadMessages(ctx, tenantId,
-                () -> warmUp(client, createCoapsRequest(Code.POST, Type.CON, getPostResource(), 0)),
-                count -> {
-            final Promise<OptionSet> result = Promise.promise();
-            final Request request = createCoapsRequest(Code.POST, Type.CON, getPostResource(), count);
-            client.advanced(getHandler(result), request);
-            return result.future();
-        });
-    }
-
-    /**
-     * Verifies that the upload of a telemetry message containing a payload that
-     * exceeds the CoAP adapter's configured max payload size fails with a 4.13
-     * response code.
-     * 
-     * @param ctx The test context.
-     * @throws IOException if the CoAP request cannot be sent to the adapter.
-     * @throws ConnectorException  if the CoAP request cannot be sent to the adapter.
-     */
-    @Test
-    @Timeout(value = 10, timeUnit = TimeUnit.SECONDS)
-    public void testUploadFailsForLargePayload(final VertxTestContext ctx) throws ConnectorException, IOException {
-
-        final Tenant tenant = new Tenant();
-
-        helper.registry.addPskDeviceForTenant(tenantId, tenant, deviceId, SECRET)
-        .compose(ok -> {
-            final CoapClient client = getCoapsClient(deviceId, tenantId, SECRET);
-            final Request request = createCoapsRequest(Code.POST, Type.CON, getPostResource(), IntegrationTestSupport.getPayload(4096));
-            final Promise<OptionSet> result = Promise.promise();
-            client.advanced(getHandler(result, ResponseCode.REQUEST_ENTITY_TOO_LARGE), request);
-            return result.future();
-        })
-        .setHandler(ctx.completing());
     }
 }

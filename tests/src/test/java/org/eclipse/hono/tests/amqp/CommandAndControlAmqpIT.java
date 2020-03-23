@@ -37,7 +37,7 @@ import org.eclipse.hono.client.CommandClient;
 import org.eclipse.hono.client.MessageConsumer;
 import org.eclipse.hono.client.MessageSender;
 import org.eclipse.hono.service.management.tenant.Tenant;
-import org.eclipse.hono.tests.CommandEndpointConfiguration.SubscriberRole;
+import org.eclipse.hono.tests.CommandEndpointConfiguration.ClientType;
 import org.eclipse.hono.tests.IntegrationTestSupport;
 import org.eclipse.hono.util.BufferResult;
 import org.eclipse.hono.util.Constants;
@@ -81,9 +81,9 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
 
     static Stream<AmqpCommandEndpointConfiguration> allCombinations() {
         return Stream.of(
-                new AmqpCommandEndpointConfiguration(SubscriberRole.DEVICE),
-                new AmqpCommandEndpointConfiguration(SubscriberRole.GATEWAY_FOR_ALL_DEVICES),
-                new AmqpCommandEndpointConfiguration(SubscriberRole.GATEWAY_FOR_SINGLE_DEVICE)
+                new AmqpCommandEndpointConfiguration(ClientType.DEVICE),
+                new AmqpCommandEndpointConfiguration(ClientType.GATEWAY_FOR_ALL_DEVICES),
+                new AmqpCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE)
                 );
     }
 
@@ -212,7 +212,7 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
             final AmqpCommandEndpointConfiguration endpointConfig,
             final VertxTestContext ctx) throws InterruptedException {
 
-        final String commandTargetDeviceId = endpointConfig.isSubscribeAsGateway()
+        final String commandTargetDeviceId = endpointConfig.isGatewayClient()
                 ? helper.setupGatewayDeviceBlocking(tenantId, deviceId, 5)
                 : deviceId;
 
@@ -258,7 +258,7 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
             final AmqpCommandEndpointConfiguration endpointConfig,
             final VertxTestContext ctx) throws InterruptedException {
 
-        final String commandTargetDeviceId = endpointConfig.isSubscribeAsGateway()
+        final String commandTargetDeviceId = endpointConfig.isGatewayClient()
                 ? helper.setupGatewayDeviceBlocking(tenantId, deviceId, 5)
                 : deviceId;
 
@@ -349,7 +349,7 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
             final AmqpCommandEndpointConfiguration endpointConfig,
             final VertxTestContext ctx) throws InterruptedException {
 
-        final String commandTargetDeviceId = endpointConfig.isSubscribeAsGateway()
+        final String commandTargetDeviceId = endpointConfig.isGatewayClient()
                 ? helper.setupGatewayDeviceBlocking(tenantId, deviceId, 5)
                 : deviceId;
 
@@ -450,7 +450,7 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
             final AmqpCommandEndpointConfiguration endpointConfig,
             final VertxTestContext ctx) throws InterruptedException {
 
-        final String commandTargetDeviceId = endpointConfig.isSubscribeAsGateway()
+        final String commandTargetDeviceId = endpointConfig.isGatewayClient()
                 ? helper.setupGatewayDeviceBlocking(tenantId, deviceId, 5)
                 : deviceId;
 
@@ -525,7 +525,7 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
             final AmqpCommandEndpointConfiguration endpointConfig,
             final VertxTestContext ctx) throws InterruptedException {
 
-        final String commandTargetDeviceId = endpointConfig.isSubscribeAsGateway()
+        final String commandTargetDeviceId = endpointConfig.isGatewayClient()
                 ? helper.setupGatewayDeviceBlocking(tenantId, deviceId, 5)
                 : deviceId;
 

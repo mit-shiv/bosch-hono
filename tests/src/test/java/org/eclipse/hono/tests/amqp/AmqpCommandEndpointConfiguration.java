@@ -28,7 +28,7 @@ public class AmqpCommandEndpointConfiguration extends CommandEndpointConfigurati
      * 
      * @param subscriberRole The way in which to subscribe for commands.
      */
-    public AmqpCommandEndpointConfiguration(final SubscriberRole subscriberRole) {
+    public AmqpCommandEndpointConfiguration(final ClientType subscriberRole) {
         super(subscriberRole);
     }
 
@@ -38,7 +38,7 @@ public class AmqpCommandEndpointConfiguration extends CommandEndpointConfigurati
     @Override
     public String toString() {
         return String.format("subscribe as: %s, southbound endpoint: %s, northbound endpoint: %s",
-                getSubscriberRole(), getSouthboundEndpoint(), getNorthboundEndpoint());
+                getClientType(), getSouthboundCommandEndpoint(), getNorthboundCommandEndpoint());
     }
 
     /**
@@ -50,9 +50,9 @@ public class AmqpCommandEndpointConfiguration extends CommandEndpointConfigurati
      * @return The address.
      */
     public final String getSubscriptionAddress(final String tenantId, final String deviceId) {
-        if (isSubscribeAsGatewayForSingleDevice()) {
-            return getSouthboundEndpoint() + "/" + tenantId + "/" + deviceId;
+        if (isGatewayClientForSingleDevice()) {
+            return getSouthboundCommandEndpoint() + "/" + tenantId + "/" + deviceId;
         }
-        return getSouthboundEndpoint();
+        return getSouthboundCommandEndpoint();
     }
 }

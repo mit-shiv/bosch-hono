@@ -32,7 +32,7 @@ import org.eclipse.hono.client.ClientErrorException;
 import org.eclipse.hono.client.MessageConsumer;
 import org.eclipse.hono.client.MessageSender;
 import org.eclipse.hono.service.management.tenant.Tenant;
-import org.eclipse.hono.tests.CommandEndpointConfiguration.SubscriberRole;
+import org.eclipse.hono.tests.CommandEndpointConfiguration.ClientType;
 import org.eclipse.hono.tests.IntegrationTestSupport;
 import org.eclipse.hono.util.EventConstants;
 import org.eclipse.hono.util.MessageHelper;
@@ -73,14 +73,14 @@ public class CommandAndControlMqttIT extends MqttTestBase {
 
     static Stream<MqttCommandEndpointConfiguration> allCombinations() {
         return Stream.of(
-                new MqttCommandEndpointConfiguration(SubscriberRole.DEVICE, false),
-                new MqttCommandEndpointConfiguration(SubscriberRole.GATEWAY_FOR_ALL_DEVICES, false),
-                new MqttCommandEndpointConfiguration(SubscriberRole.GATEWAY_FOR_SINGLE_DEVICE, false),
+                new MqttCommandEndpointConfiguration(ClientType.DEVICE, false),
+                new MqttCommandEndpointConfiguration(ClientType.GATEWAY_FOR_ALL_DEVICES, false),
+                new MqttCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE, false),
 
                 // the following variants can be removed once we no longer support the legacy topic filters
-                new MqttCommandEndpointConfiguration(SubscriberRole.DEVICE, true),
-                new MqttCommandEndpointConfiguration(SubscriberRole.GATEWAY_FOR_ALL_DEVICES, true),
-                new MqttCommandEndpointConfiguration(SubscriberRole.GATEWAY_FOR_SINGLE_DEVICE, true)
+                new MqttCommandEndpointConfiguration(ClientType.DEVICE, true),
+                new MqttCommandEndpointConfiguration(ClientType.GATEWAY_FOR_ALL_DEVICES, true),
+                new MqttCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE, true)
                 );
     }
 
@@ -137,7 +137,7 @@ public class CommandAndControlMqttIT extends MqttTestBase {
             final MqttCommandEndpointConfiguration endpointConfig,
             final VertxTestContext ctx) throws InterruptedException {
 
-        final String commandTargetDeviceId = endpointConfig.isSubscribeAsGateway()
+        final String commandTargetDeviceId = endpointConfig.isGatewayClient()
                 ? helper.setupGatewayDeviceBlocking(tenantId, deviceId, 5)
                 : deviceId;
         final Checkpoint commandsReceived = ctx.checkpoint(COMMANDS_TO_SEND);
@@ -202,7 +202,7 @@ public class CommandAndControlMqttIT extends MqttTestBase {
             final MqttCommandEndpointConfiguration endpointConfig,
             final MqttQoS qos) throws InterruptedException {
 
-        final String commandTargetDeviceId = endpointConfig.isSubscribeAsGateway()
+        final String commandTargetDeviceId = endpointConfig.isGatewayClient()
                 ? helper.setupGatewayDeviceBlocking(tenantId, deviceId, 5)
                 : deviceId;
 
@@ -342,7 +342,7 @@ public class CommandAndControlMqttIT extends MqttTestBase {
         final VertxTestContext setup = new VertxTestContext();
         final Checkpoint ready = setup.checkpoint(3);
 
-        final String commandTargetDeviceId = endpointConfig.isSubscribeAsGateway()
+        final String commandTargetDeviceId = endpointConfig.isGatewayClient()
                 ? helper.setupGatewayDeviceBlocking(tenantId, deviceId, 5)
                 : deviceId;
 

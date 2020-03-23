@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019 Contributors to the Eclipse Foundation
+ * Copyright (c) 2019, 2020 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -17,39 +17,84 @@ package org.eclipse.hono.tests;
 import org.eclipse.hono.util.CommandConstants;
 
 /**
- * Configuration properties for defining variants of Command &amp; Control
- * related test scenarios.
+ * Configuration properties for defining variants of how clients interact
+ * with a protocol adapter.
  *
  */
 public class CommandEndpointConfiguration {
 
-    private final SubscriberRole subscriberRole;
+    private final ClientType clientType;
+    private final TelemetryEndpoint telemetryEndpoint;
+    private final boolean authenticated;
+
 
     /**
-     * Defines the different ways in which to subscribe for commands.
+     * Defines the different types of clients that can connect to an adapter.
      */
-    public enum SubscriberRole {
+    public enum ClientType {
         /**
-         * Subscribe as device.
+         * A directly connected device.
          */
         DEVICE,
         /**
-         * Subscribe as gateway for all devices connected to the gateway.
+         * A gateway acting on behalf of all devices of a tenant.
          */
         GATEWAY_FOR_ALL_DEVICES,
         /**
-         * Subscribe as gateway for a single device connected to the gateway.
+         * A gateway acting on behalf of a single device.
          */
         GATEWAY_FOR_SINGLE_DEVICE
     }
 
     /**
-     * Creates a new configuration.
-     * 
-     * @param subscriberRole The way in which to subscribe for commands.
+     * The endpoint to use for uploading data to an adapter.
+     *
      */
-    public CommandEndpointConfiguration(final SubscriberRole subscriberRole) {
-        this.subscriberRole = subscriberRole;
+    public enum TelemetryEndpoint {
+
+        TELEMETRY_AT_MOST_ONCE(DeliverySemantics.AT_MOST_ONCE),
+        TELEMETRY_AT_LEAST_ONCE(DeliverySemantics.AT_LEAST_ONCE),
+        EVENT(DeliverySemantics.AT_LEAST_ONCE);
+
+        private final DeliverySemantics qos;
+
+        TelemetryEndpoint(final DeliverySemantics qos) {
+            this.qos = qos;
+        }
+
+        /**
+         * Gets the delivery semantics associated with this endpoint.
+         * 
+         * @return The delivery semantics.
+         */
+        public final DeliverySemantics getDeliverySemantics() {
+            return qos;
+        }
+    }
+
+    /**
+     * Creates a new configuration using the event endpoint for uploading data.
+     * 
+     * @param clientType The type of client connecting to the adapter.
+     */
+    public CommandEndpointConfiguration(final ClientType clientType) {
+        this(clientType, TelemetryEndpoint.EVENT, true);
+    }
+
+    /**
+     * Creates a new configuration using the event endpoint for uploading data.
+     * 
+     * @param clientType The type of client connecting to the adapter.
+     * @param telemetryEndpoint The endpoint to use for uploading data.
+     * @param authenticated {@code true} if the device should authenticate to the adapter.
+     */
+    public CommandEndpointConfiguration(
+            final ClientType clientType,
+            final TelemetryEndpoint telemetryEndpoint,
+            final boolean authenticated) {
+        this.clientType = clientType;
+        this.telemetryEndpoint = telemetryEndpoint;
+        this.authenticated = authenticated;
     }
 
     /**
@@ -57,8 +102,25 @@ public class CommandEndpointConfiguration {
      */
     @Override
     public String toString() {
-        return String.format("subscribe as: %s, southbound endpoint: %s, northbound endpoint: %s",
-                getSubscriberRole(), getSouthboundEndpoint(), getNorthboundEndpoint());
+        return String.format("Client [type: %s, authenticated: %b], telemetry endpoint: %s", clientType, authenticated, telemetryEndpoint);
+    }
+
+    /**
+     * Checks if the device authenticates to the adapter.
+     * 
+     * @return {@code true} if the device authenticates to the adapter.
+     */
+    public final boolean isAuthenticated() {
+        return authenticated;
+    }
+
+    /**
+     * Gets the endpoint to use for uploading data.
+     * 
+     * @return The endpoint.
+     */
+    public final TelemetryEndpoint getTelemetryEndpoint() {
+        return telemetryEndpoint;
     }
 
     /**
@@ -66,45 +128,45 @@ public class CommandEndpointConfiguration {
      * 
      * @return The command endpoint name.
      */
-    public final String getSouthboundEndpoint() {
+    public final String getSouthboundCommandEndpoint() {
         return CommandConstants.COMMAND_ENDPOINT;
     }
 
     /**
-     * Gets the way in which to subscribe for commands.
+     * Gets the type of client connecting to the adapter.
      *
-     * @return The subscriber role.
+     * @return The type.
      */
-    public SubscriberRole getSubscriberRole() {
-        return subscriberRole;
+    public ClientType getClientType() {
+        return clientType;
     }
 
     /**
-     * Checks whether command subscription shall be done as a gateway.
+     * Checks whether the client is a gateway.
      *
-     * @return {@code true} if to subscribe as a gateway.
+     * @return {@code true} if the client is a gateway and acts on behalf of one
+     *         or more other devices.
      */
-    public boolean isSubscribeAsGateway() {
-        return subscriberRole == SubscriberRole.GATEWAY_FOR_ALL_DEVICES
-                || subscriberRole == SubscriberRole.GATEWAY_FOR_SINGLE_DEVICE;
+    public boolean isGatewayClient() {
+        return isGatewayClientForAllDevices() || isGatewayClientForSingleDevice();
     }
 
     /**
-     * Checks whether command subscription shall be done as a gateway for all connected devices.
+     * Checks if the client is a gateway acting on behalf of all of the tenant's devices.
      *
-     * @return {@code true} if to subscribe as a gateway for all connected devices.
+     * @return {@code true} if the client is a gateway for all devices.
      */
-    public boolean isSubscribeAsGatewayForAllDevices() {
-        return subscriberRole == SubscriberRole.GATEWAY_FOR_ALL_DEVICES;
+    public boolean isGatewayClientForAllDevices() {
+        return clientType == ClientType.GATEWAY_FOR_ALL_DEVICES;
     }
 
     /**
-     * Checks whether command subscription shall be done as a gateway on behalf of a single device.
+     * Checks if the client is a gateway acting on behalf of a single device only.
      *
-     * @return {@code true} if to subscribe as a gateway on behalf of a single device.
+     * @return {@code true} if the client is a gateway for a single device.
      */
-    public boolean isSubscribeAsGatewayForSingleDevice() {
-        return subscriberRole == SubscriberRole.GATEWAY_FOR_SINGLE_DEVICE;
+    public boolean isGatewayClientForSingleDevice() {
+        return clientType == ClientType.GATEWAY_FOR_SINGLE_DEVICE;
     }
 
     /**
@@ -113,7 +175,7 @@ public class CommandEndpointConfiguration {
      * 
      * @return The endpoint name.
      */
-    public final String getNorthboundEndpoint() {
+    public final String getNorthboundCommandEndpoint() {
         return CommandConstants.COMMAND_ENDPOINT;
     }
 
@@ -126,7 +188,7 @@ public class CommandEndpointConfiguration {
      */
     public final String getCommandMessageAddress(final String tenantId, final String deviceId) {
 
-        return String.format("%s/%s/%s", getNorthboundEndpoint(), tenantId, deviceId);
+        return String.format("%s/%s/%s", getNorthboundCommandEndpoint(), tenantId, deviceId);
     }
 
     /**

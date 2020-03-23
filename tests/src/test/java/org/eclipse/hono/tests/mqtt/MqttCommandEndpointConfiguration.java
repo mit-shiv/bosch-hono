@@ -35,7 +35,7 @@ public class MqttCommandEndpointConfiguration extends CommandEndpointConfigurati
      * @param useLegacyTopicFilter {@code true} if the device uses the legacy topic filter for subscribing to commands.
      */
     public MqttCommandEndpointConfiguration(
-            final SubscriberRole subscriberRole,
+            final ClientType subscriberRole,
             final boolean useLegacyTopicFilter) {
 
         super(subscriberRole);
@@ -48,7 +48,7 @@ public class MqttCommandEndpointConfiguration extends CommandEndpointConfigurati
     @Override
     public String toString() {
         return String.format("subscribe as: %s, southbound endpoint: %s, northbound endpoint: %s, topic filter: %s",
-                getSubscriberRole(), getSouthboundEndpoint(), getNorthboundEndpoint(), getCommandTopicFilter("${deviceId}"));
+                getClientType(), getSouthboundCommandEndpoint(), getNorthboundCommandEndpoint(), getCommandTopicFilter("${deviceId}"));
     }
 
     /**
@@ -60,16 +60,16 @@ public class MqttCommandEndpointConfiguration extends CommandEndpointConfigurati
      * @throws IllegalStateException if the subscriber role is unsupported.
      */
     public final String getCommandTopicFilter(final String deviceId) {
-        switch (getSubscriberRole()) {
+        switch (getClientType()) {
         case DEVICE:
             return String.format(
-                    "%s/%s/req/#", getSouthboundEndpoint(), legacyTopicFilter ? "+/+" : "/");
+                    "%s/%s/req/#", getSouthboundCommandEndpoint(), legacyTopicFilter ? "+/+" : "/");
         case GATEWAY_FOR_ALL_DEVICES:
             return String.format(
-                    "%s/%s/req/#", getSouthboundEndpoint(), legacyTopicFilter ? "+/+" : "/+");
+                    "%s/%s/req/#", getSouthboundCommandEndpoint(), legacyTopicFilter ? "+/+" : "/+");
         case GATEWAY_FOR_SINGLE_DEVICE:
             return String.format(
-                    "%s/%s/req/#", getSouthboundEndpoint(), (legacyTopicFilter ? "+/" : "/") + deviceId);
+                    "%s/%s/req/#", getSouthboundCommandEndpoint(), (legacyTopicFilter ? "+/" : "/") + deviceId);
         default:
             throw new IllegalStateException("unknown role");
         }
@@ -84,10 +84,10 @@ public class MqttCommandEndpointConfiguration extends CommandEndpointConfigurati
      * @return The topic name.
      */
     public final String getResponseTopic(final String deviceId, final String requestId, final int status) {
-        if (isSubscribeAsGateway()) {
-            return String.format("%s//%s/res/%s/%d", getSouthboundEndpoint(), deviceId, requestId, status);
+        if (isGatewayClient()) {
+            return String.format("%s//%s/res/%s/%d", getSouthboundCommandEndpoint(), deviceId, requestId, status);
         }
-        return String.format("%s///res/%s/%d", getSouthboundEndpoint(), requestId, status);
+        return String.format("%s///res/%s/%d", getSouthboundCommandEndpoint(), requestId, status);
     }
 
     void assertCommandPublishTopicStructure(
@@ -100,14 +100,14 @@ public class MqttCommandEndpointConfiguration extends CommandEndpointConfigurati
 
         assertThat(topic.getEndpoint())
         .as("command topic contains correct endpoint")
-        .isEqualTo(getSouthboundEndpoint());
+        .isEqualTo(getSouthboundCommandEndpoint());
 
         assertThat(topic.getTenantId())
         .as("command topic does not contain tenant ID")
         .isNull();
 
 
-        switch (getSubscriberRole()) {
+        switch (getClientType()) {
         case DEVICE:
             assertThat(topic.getResourceId())
             .as("command topic does not contain device ID")

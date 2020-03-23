@@ -38,7 +38,7 @@ import org.eclipse.hono.client.MessageConsumer;
 import org.eclipse.hono.client.ServiceInvocationException;
 import org.eclipse.hono.service.management.device.Device;
 import org.eclipse.hono.service.management.tenant.Tenant;
-import org.eclipse.hono.tests.CommandEndpointConfiguration.SubscriberRole;
+import org.eclipse.hono.tests.CommandEndpointConfiguration.ClientType;
 import org.eclipse.hono.tests.CrudHttpClient;
 import org.eclipse.hono.tests.IntegrationTestSupport;
 import org.eclipse.hono.tests.Tenants;
@@ -216,9 +216,9 @@ public abstract class HttpTestBase {
      */
     static Stream<HttpCommandEndpointConfiguration> commandAndControlVariants() {
         return Stream.of(
-                new HttpCommandEndpointConfiguration(SubscriberRole.DEVICE),
-                new HttpCommandEndpointConfiguration(SubscriberRole.GATEWAY_FOR_ALL_DEVICES),
-                new HttpCommandEndpointConfiguration(SubscriberRole.GATEWAY_FOR_SINGLE_DEVICE)
+                new HttpCommandEndpointConfiguration(ClientType.DEVICE),
+                new HttpCommandEndpointConfiguration(ClientType.GATEWAY_FOR_ALL_DEVICES),
+                new HttpCommandEndpointConfiguration(ClientType.GATEWAY_FOR_SINGLE_DEVICE)
                 );
     }
 
@@ -1019,10 +1019,10 @@ public abstract class HttpTestBase {
             return;
         }
 
-        final String commandTargetDeviceId = endpointConfig.isSubscribeAsGateway()
+        final String commandTargetDeviceId = endpointConfig.isGatewayClient()
                 ? helper.setupGatewayDeviceBlocking(tenantId, deviceId, 5)
                 : deviceId;
-        final String subscribingDeviceId = endpointConfig.isSubscribeAsGatewayForSingleDevice() ? commandTargetDeviceId
+        final String subscribingDeviceId = endpointConfig.isGatewayClientForSingleDevice() ? commandTargetDeviceId
                 : deviceId;
 
         final AtomicInteger counter = new AtomicInteger();
@@ -1084,7 +1084,7 @@ public abstract class HttpTestBase {
 
                                 final Buffer body = Buffer.buffer("ok");
                                 final Future<MultiMap> result;
-                                if (endpointConfig.isSubscribeAsGateway()) {
+                                if (endpointConfig.isGatewayClient()) {
                                     // GW uses PUT when acting on behalf of a device
                                     result = httpClient.update(responseUri, body, cmdResponseRequestHeaders,
                                             status -> status == HttpURLConnection.HTTP_ACCEPTED);
@@ -1135,10 +1135,10 @@ public abstract class HttpTestBase {
             return;
         }
 
-        final String commandTargetDeviceId = endpointConfig.isSubscribeAsGateway()
+        final String commandTargetDeviceId = endpointConfig.isGatewayClient()
                 ? helper.setupGatewayDeviceBlocking(tenantId, deviceId, 5)
                 : deviceId;
-        final String subscribingDeviceId = endpointConfig.isSubscribeAsGatewayForSingleDevice() ? commandTargetDeviceId
+        final String subscribingDeviceId = endpointConfig.isGatewayClientForSingleDevice() ? commandTargetDeviceId
                 : deviceId;
 
         final AtomicInteger counter = new AtomicInteger();
@@ -1189,7 +1189,7 @@ public abstract class HttpTestBase {
             final HttpCommandEndpointConfiguration endpointConfig,
             final String requestDeviceId) {
 
-        if (endpointConfig.isSubscribeAsGatewayForSingleDevice()) {
+        if (endpointConfig.isGatewayClientForSingleDevice()) {
             final String uri = getEndpointUri() + "/" + tenantId + "/" + requestDeviceId;
             // GW uses PUT when acting on behalf of a device
             return httpClient.update(uri, payload, requestHeaders, status -> status == HttpURLConnection.HTTP_OK);
