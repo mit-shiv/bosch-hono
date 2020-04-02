@@ -548,7 +548,7 @@ public abstract class AbstractTenantServiceTest {
             return getTenantManagementService().updateTenant(
                     "tenantTwo",
                     tenantTwo,
-                    null,
+                    Optional.empty(),
                     NoopSpan.INSTANCE);
         })
         .setHandler(ctx.succeeding(s -> {
