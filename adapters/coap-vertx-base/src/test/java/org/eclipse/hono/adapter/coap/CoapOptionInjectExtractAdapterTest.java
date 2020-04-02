@@ -20,6 +20,7 @@ import org.eclipse.californium.core.coap.OptionSet;
 import org.junit.jupiter.api.Test;
 
 import io.jaegertracing.Configuration;
+import io.jaegertracing.Configuration.CodecConfiguration;
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
 import io.opentracing.Tracer;
@@ -30,15 +31,15 @@ import io.opentracing.propagation.Format;
  * Tests verifying the behavior of {@link CoapOptionInjectExtractAdapter}.
  *
  */
-class CoapOptionInjectExtractAdapterTest {
+public class CoapOptionInjectExtractAdapterTest {
 
     /**
      * Verifies that the Jaeger tracer implementation can successfully use the adapter to inject and extract
-     * a SpanContext.
+     * a SpanContext using the <em>jaeger</em> format.
      */
     @Test
-    public void testJaegerTracerCanUseAdapter() {
-        final Configuration config = new Configuration("test");
+    public void testJaegerTracerCanExtractContext() {
+        final Configuration config = new Configuration("test").withCodec(CodecConfiguration.fromString("jaeger"));
         final Tracer tracer = config.getTracer();
         final Span span = tracer.buildSpan("do").start();
 
@@ -47,6 +48,7 @@ class CoapOptionInjectExtractAdapterTest {
         tracer.inject(span.context(), Format.Builtin.BINARY, injectAdapter);
 
         final SpanContext context = tracer.extract(Format.Builtin.BINARY, new CoapOptionInjectExtractAdapter(optionSet));
+        assertThat(context.toTraceId()).isEqualTo(span.context().toTraceId());
         assertThat(context.toSpanId()).isEqualTo(span.context().toSpanId());
     }
 

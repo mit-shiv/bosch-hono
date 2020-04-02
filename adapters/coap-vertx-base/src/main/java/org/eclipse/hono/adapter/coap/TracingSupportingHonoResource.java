@@ -15,6 +15,7 @@
 package org.eclipse.hono.adapter.coap;
 
 import java.util.Objects;
+import java.util.Optional;
 
 import org.eclipse.californium.core.CoapResource;
 import org.eclipse.californium.core.coap.CoAP.ResponseCode;
@@ -42,10 +43,22 @@ import io.vertx.core.Future;
  * the {@link #handlePost(CoapExchange, Span)} or {@link #handlePut(CoapExchange, Span)}
  * method.
  * <p>
- * If the request contains the {@link CoapOptionInjectExtractAdapter#OPTION_TRACE_CONTEXT} option, its value
- * is expected to be a binary encoded trace context and the {@link CoapOptionInjectExtractAdapter}
- * is used to extract a {@code SpanContext} which is then used as the parent for the newly created
- * {@code Span}.
+ * For each CoAP request this resource tries to extract a trace context from the request options
+ * as follows
+ * <ol>
+ * <li>If the request contains the {@link CoapOptionW3CAdapter#OPTION_TRACEPARENT} option, it
+ * is expected to contain a W3C Trace Context <em>traceparent</em> value.
+ * If the request contains the {@link CoapOptionW3CAdapter#OPTION_TRACESTATE} optoin, it
+ * is expected to contain a W3C Trace Context <em>tracestate</em> value.
+ * If the traceparent option is present, the {@link CoapOptionW3CAdapter} is used to create an OpenTracing
+ * {@code SpanContext} from it and the (optional) tracestate option value.</li>
+ * <li>If the traceparent option is not present or if creation of the SpanContext from it fails
+ * and if the request contains the {@link CoapOptionInjectExtractAdapter#OPTION_TRACE_CONTEXT} option,
+ * then the {@link CoapOptionInjectExtractAdapter} is used to extract a {@code SpanContext} from its
+ * value.</li>
+ * </ol>
+ * If a {@code SpanContext} could be created from the options, it is used as the parent for the newly
+ * created {@code Span} for tracking the processing of the request.
  */
 public abstract class TracingSupportingHonoResource extends CoapResource {
 
@@ -78,7 +91,8 @@ public abstract class TracingSupportingHonoResource extends CoapResource {
     }
 
     private SpanContext extractSpanContextFromRequest(final OptionSet requestOptions) {
-        return tracer.extract(Format.Builtin.BINARY, new CoapOptionInjectExtractAdapter(requestOptions));
+        return Optional.ofNullable(tracer.extract(Format.Builtin.TEXT_MAP, new CoapOptionW3CAdapter(requestOptions)))
+                .orElseGet(() -> tracer.extract(Format.Builtin.BINARY, new CoapOptionInjectExtractAdapter(requestOptions)));
     }
 
     private Span newSpan(final Exchange exchange) {
