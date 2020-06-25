@@ -27,6 +27,8 @@ public final class MongoDbBasedRegistrationConfigProperties extends AbstractMong
      */
     private static final String DEFAULT_DEVICE_COLLECTION_NAME = "devices";
 
+    private static final int DEFAULT_PAGE_LIMIT = 50;
+    private int defaultPageLimit = DEFAULT_PAGE_LIMIT;
     private int maxDevicesPerTenant = UNLIMITED_DEVICES_PER_TENANT;
 
     /**
@@ -57,10 +59,31 @@ public final class MongoDbBasedRegistrationConfigProperties extends AbstractMong
         this.maxDevicesPerTenant = maxDevices;
     }
 
+    /**
+     * Gets the default limit on the number of devices to be retrieved during the search devices operation.
+     * <p>
+     * The default value of this property is {@link #DEFAULT_PAGE_LIMIT}.
+     *
+     * @return The default page limit.
+     */
+    public int getDefaultPageLimit() {
+        return defaultPageLimit;
+    }
+
+    /**
+     * Sets the default limit on the number of devices to be retrieved during the search devices operation.
+     * <p>
+     * The default value of this property is {@link #DEFAULT_PAGE_LIMIT}.
+     *
+     * @param defaultPageLimit The default page limit.
+     */
+    public void setDefaultPageLimit(final int defaultPageLimit) {
+        this.defaultPageLimit = defaultPageLimit;
+    }
+
     @Override
     protected String getDefaultCollectionName() {
         return DEFAULT_DEVICE_COLLECTION_NAME;
     }
-
 
 }

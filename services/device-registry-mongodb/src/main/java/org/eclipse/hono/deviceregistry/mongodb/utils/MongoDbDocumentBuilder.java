@@ -13,6 +13,7 @@
 
 package org.eclipse.hono.deviceregistry.mongodb.utils;
 
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -124,6 +125,25 @@ public final class MongoDbDocumentBuilder {
      */
     public MongoDbDocumentBuilder withAuthId(final String authId) {
         document.put(FIELD_CREDENTIALS_AUTH_ID_KEY, authId);
+        return this;
+    }
+
+    /**
+     * Sets the json object with the given device filters.
+     *
+     * @param deviceFilters The device filters.
+     * @return a reference to this for fluent use.
+     */
+    public MongoDbDocumentBuilder withDeviceFilters(final Optional<Map<String, ?>> deviceFilters) {
+        deviceFilters.ifPresent(filters -> {
+            filters.forEach((filterName, filterValue) -> {
+                if (filterName.equals(RegistryManagementConstants.FIELD_PAYLOAD_DEVICE_ID)) {
+                    document.put(filterName, filterValue);
+                } else {
+                    document.put(MongoDbDeviceRegistryUtils.FIELD_DEVICE + "." + filterName, filterValue);
+                }
+            });
+        });
         return this;
     }
 }

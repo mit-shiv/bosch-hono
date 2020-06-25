@@ -13,7 +13,9 @@
 package org.eclipse.hono.deviceregistry.mongodb.service;
 
 import java.net.HttpURLConnection;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -67,6 +69,8 @@ public final class MongoDbBasedRegistrationService extends AbstractRegistrationS
      */
     private static final String PROPERTY_DEVICE_MEMBER_OF = String.format("%s.%s",
             MongoDbDeviceRegistryUtils.FIELD_DEVICE, RegistryManagementConstants.FIELD_MEMBER_OF);
+    private static final int MONGO_DB_SORT_ASCENDING = 1;
+    private static final int MONGO_DB_SORT_DESCENDING = -1;
     private static final int INDEX_CREATION_MAX_RETRIES = 3;
 
     private final MongoClient mongoClient;
@@ -389,5 +393,90 @@ public final class MongoDbBasedRegistrationService extends AbstractRegistrationS
                     }
                     return Future.succeededFuture();
                 });
+    }
+
+    //  Implementation of search devices operation in Progress ******
+
+    Future<OperationResult<List<Device>>> searchDevices(
+            final String tenantId,
+            final Optional<Integer> limit,
+            final Optional<Integer> offset,
+            final Optional<Map<String, ?>> sortOptions,
+            final Optional<Map<String, ?>> filters,
+            final Span span) {
+
+        Objects.requireNonNull(tenantId);
+        Objects.requireNonNull(limit);
+        Objects.requireNonNull(offset);
+        Objects.requireNonNull(sortOptions);
+        Objects.requireNonNull(filters);
+        Objects.requireNonNull(span);
+
+        return processSearchDevices(
+                tenantId,
+                limit.orElse(config.getDefaultPageLimit()),
+                offset.orElse(0),
+                sortOptions,
+                filters)
+                .recover(error -> Future.succeededFuture(MongoDbDeviceRegistryUtils.mapErrorToResult(error, span)));
+    }
+
+    private Future<OperationResult<List<Device>>> processSearchDevices(
+            final String tenantId,
+            final int limit,
+            final int offset,
+            final Optional<Map<String, ?>> sortOptions,
+            final Optional<Map<String, ?>> filters) {
+        final JsonObject findDeviceQuery = MongoDbDocumentBuilder.builder()
+                .withTenantId(tenantId)
+                .withDeviceFilters(filters)
+                .document();
+        final FindOptions findDevicesOptions = new FindOptions()
+                .setLimit(limit)
+                .setSkip(offset);
+        final Promise<List<JsonObject>> readDevicePromise = Promise.promise();
+
+        sortOptions.ifPresent(options -> {
+            if (!options.isEmpty()) {
+                findDevicesOptions.setSort(getSortDocument(options));
+            }
+        });
+
+        mongoClient.findWithOptions(
+                config.getCollectionName(),
+                findDeviceQuery,
+                findDevicesOptions,
+                readDevicePromise);
+
+        return readDevicePromise.future()
+                .map(devicesList -> {
+                    final List<Device> devices = Optional.ofNullable(devicesList)
+                            .map(list -> list.stream()
+                                    .map(json -> json.mapTo(DeviceDto.class))
+                                    .map(DeviceDto::getDevice)
+                                    .collect(Collectors.toList()))
+                            .orElse(new ArrayList<>());
+
+                    return OperationResult.ok(
+                            HttpURLConnection.HTTP_OK,
+                            devices,
+                            Optional.ofNullable(
+                                    DeviceRegistryUtils.getCacheDirective(config.getCacheMaxAge())),
+                            Optional.empty());
+                });
+    }
+
+    private JsonObject getSortDocument(final Map<String, ?> sortOptions) {
+        final JsonObject sortDocument = new JsonObject();
+        sortOptions.forEach((fieldName, sortOrder) -> {
+            if (fieldName.equals(RegistryManagementConstants.FIELD_PAYLOAD_DEVICE_ID)) {
+                // TODO: currently all are sorted in ascending order and this to be changed after the API has been
+                // finalised.
+                sortDocument.put(fieldName, MONGO_DB_SORT_ASCENDING);
+            } else {
+                sortDocument.put(MongoDbDeviceRegistryUtils.FIELD_DEVICE + "." + fieldName, MONGO_DB_SORT_ASCENDING);
+            }
+        });
+        return sortDocument;
     }
 }
