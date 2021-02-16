@@ -91,6 +91,7 @@ Test cases are run against Docker images of Hono server + (Apache Qpid Dispatch 
     -->
     <hono.kafka.disabled>true</hono.kafka.disabled>
     <hono.zookeeper.disabled>true</hono.zookeeper.disabled>
+    <hono.kafka.log-level>WARN</hono.kafka.log-level>
 
     <!--
       Device Registry related properties - The MongoDB based device registry is used as the default one.
@@ -463,7 +464,7 @@ Test cases are run against Docker images of Hono server + (Apache Qpid Dispatch 
                 <goals>
                   <goal>reserve-network-port</goal>
                 </goals>
-                <phase>pre-integration-test</phase>
+                <phase>initialize</phase>
                 <configuration>
                   <randomPort>true</randomPort>
                   <portNames>
@@ -476,6 +477,36 @@ Test cases are run against Docker images of Hono server + (Apache Qpid Dispatch 
                     -->
                     <portName>kafka.port</portName>
                   </portNames>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <!--
+              The standard Maven plugin for writing properties cannot be used as it is only capable of writing
+              all project properties to file but not specific ones only.
+            -->
+            <groupId>com.internetitem</groupId>
+            <artifactId>write-properties-file-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <phase>post-integration-test</phase>
+                <goals>
+                  <goal>write-properties-file</goal>
+                </goals>
+                <configuration>
+                  <filename>kafka.port.properties</filename>
+                  <outputDirectory>${project.build.directory}/docker</outputDirectory>
+                  <properties>
+                    <property>
+                      <name>kafka.port</name>
+                      <value>${kafka.port}</value>
+                    </property>
+                    <property>
+                      <name>docker.host.address</name>
+                      <value>${docker.host.address}</value>
+                    </property>
+                  </properties>
                 </configuration>
               </execution>
             </executions>
@@ -896,7 +927,6 @@ Test cases are run against Docker images of Hono server + (Apache Qpid Dispatch 
                     <ports>
                       <port>${kafka.port}:${kafka.port}</port>
                     </ports>
-                    <portPropertyFile>${project.build.directory}/docker/kafka.port.properties</portPropertyFile>
                     <network>
                       <mode>custom</mode>
                       <name>hono</name>
@@ -920,6 +950,8 @@ Test cases are run against Docker images of Hono server + (Apache Qpid Dispatch 
                       <KAFKA_TRANSACTION_STATE_LOG_MIN_ISR>1</KAFKA_TRANSACTION_STATE_LOG_MIN_ISR>
                       <KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR>1</KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR>
                       <KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS>0</KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS>
+                      <!-- log level for kafka.server.KafkaServer needs to stay on INFO so that docker-maven-plugin can wait for container startup -->
+                      <KAFKA_LOG4J_LOGGERS>kafka.cluster=${hono.kafka.log-level},kafka.controller=${hono.kafka.log-level},kafka.coordinator=${hono.kafka.log-level},kafka.log=${hono.kafka.log-level},kafka.authorizer=${hono.kafka.log-level},kafka.zk=${hono.kafka.log-level},state.change.logger=${hono.kafka.log-level},kafka.server=${hono.kafka.log-level},kafka.server.KafkaServer=INFO</KAFKA_LOG4J_LOGGERS>
                     </env>
                   </run>
                 </image>
@@ -1495,8 +1527,7 @@ Test cases are run against Docker images of Hono server + (Apache Qpid Dispatch 
                 <downstream.amqp.port>${qpid.amqp.port}</downstream.amqp.port>
                 <downstream.username>consumer@HONO</downstream.username>
                 <downstream.password>verysecret</downstream.password>
-                <kafka.host>${docker.host.address}</kafka.host>
-                <kafka.port>${kafka.external.port}</kafka.port>
+                <downstream.bootstrap.servers>${docker.host.address}:${kafka.port}</downstream.bootstrap.servers>
                 <deviceconnection.enabled>${hono.commandrouter.disabled}</deviceconnection.enabled>
                 <deviceconnection.host>${deviceconnection.ip}</deviceconnection.host>
                 <deviceconnection.amqp.port>${deviceconnection.amqp.port}</deviceconnection.amqp.port>
