@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.qpid.proton.amqp.transport.DeliveryState;
 import org.eclipse.hono.application.client.DownstreamMessage;
 import org.eclipse.hono.application.client.MessageConsumer;
+import org.eclipse.hono.application.client.MessageContext;
 import org.eclipse.hono.application.client.amqp.AmqpMessageContext;
 import org.eclipse.hono.client.NoConsumerException;
 import org.eclipse.hono.client.SendMessageTimeoutException;
@@ -37,7 +38,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
-import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpHeaders;
@@ -66,8 +66,9 @@ public class TelemetryHttpIT extends HttpTestBase {
     @Override
     protected Future<MessageConsumer> createConsumer(
             final String tenantId,
-            final Handler<DownstreamMessage<AmqpMessageContext>> messageConsumer) {
-        return helper.amqpApplicationClient.createTelemetryConsumer(tenantId, messageConsumer, remoteClose -> {});
+            final Handler<DownstreamMessage<MessageContext>> messageConsumer) {
+        return helper.applicationClientFactory
+                .createTelemetryConsumer(tenantId, (Handler) messageConsumer, remoteClose -> {});
     }
 
     /**
@@ -205,20 +206,21 @@ public class TelemetryHttpIT extends HttpTestBase {
         final AtomicReference<ProtonDelivery> deliveryRef = new AtomicReference<>();
         helper.registry
                 .addDeviceForTenant(tenantId, tenant, deviceId, PWD)
-                .compose(ok -> helper.amqpApplicationClient.createTelemetryConsumer(
+                .compose(ok -> helper.applicationClientFactory.createTelemetryConsumer(
                         tenantId,
                         msg -> {
-                            final Promise<Void> result = Promise.promise();
-                            final var delivery = msg.getMessageContext().getDelivery();
-                            deliveryRef.set(delivery);
-                            logger.debug("received message: {}", msg.getMessageContext().getRawMessage());
-                            ctx.verify(() -> {
-                                assertThat(delivery.remotelySettled()).isFalse();
-                                assertThat(delivery.getRemoteState()).isNull();
-                            });
+                            if (msg.getMessageContext() instanceof AmqpMessageContext) {
+                                final AmqpMessageContext amqpMessageContext = (AmqpMessageContext) msg.getMessageContext();
+                                final var delivery = amqpMessageContext.getDelivery();
+                                deliveryRef.set(delivery);
+                                logger.debug("received message: {}", amqpMessageContext.getRawMessage());
+                                ctx.verify(() -> {
+                                    assertThat(delivery.remotelySettled()).isFalse();
+                                    assertThat(delivery.getRemoteState()).isNull();
+                                });
+                            }
+
                             messageReceived.flag();
-                            // don't update the delivery state here
-                            return result.future();
                         },
                         remoteClose -> {}))
                 .onComplete(setup.completing());

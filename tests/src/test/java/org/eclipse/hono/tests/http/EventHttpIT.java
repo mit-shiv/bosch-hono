@@ -21,6 +21,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.eclipse.hono.application.client.DownstreamMessage;
 import org.eclipse.hono.application.client.MessageConsumer;
+import org.eclipse.hono.application.client.MessageContext;
 import org.eclipse.hono.application.client.amqp.AmqpMessageContext;
 import org.eclipse.hono.service.management.tenant.Tenant;
 import org.eclipse.hono.tests.IntegrationTestSupport;
@@ -57,14 +58,20 @@ public class EventHttpIT extends HttpTestBase {
     @Override
     protected Future<MessageConsumer> createConsumer(
             final String tenantId,
-            final Handler<DownstreamMessage<AmqpMessageContext>> messageConsumer) {
+            final Handler<DownstreamMessage<MessageContext>> messageConsumer) {
 
-        return helper.amqpApplicationClient.createEventConsumer(tenantId, messageConsumer, remoteClose -> {});
+        return helper.applicationClientFactory.createEventConsumer(tenantId, (Handler) messageConsumer, remoteClose -> {})
+                .onFailure(th -> {
+                    System.out.println("ERRRRRROOR Creating Consumer: " + th);
+                });
     }
 
     @Override
-    protected void assertAdditionalMessageProperties(final DownstreamMessage<AmqpMessageContext> msg) {
-        assertThat(msg.getMessageContext().getRawMessage().isDurable()).isTrue();
+    protected void assertAdditionalMessageProperties(final DownstreamMessage msg) {
+        if (msg.getMessageContext() instanceof AmqpMessageContext) {
+            final AmqpMessageContext amqpMessageContext = (AmqpMessageContext) msg.getMessageContext();
+            assertThat(amqpMessageContext.getRawMessage().isDurable()).isTrue();
+        }
     }
 
     /**

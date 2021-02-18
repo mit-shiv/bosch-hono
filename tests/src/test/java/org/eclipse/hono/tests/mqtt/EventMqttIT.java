@@ -92,7 +92,7 @@ public class EventMqttIT extends MqttPublishTestBase {
             final String tenantId,
             final Handler<DownstreamMessage<AmqpMessageContext>> messageConsumer) {
 
-        return helper.amqpApplicationClient.createEventConsumer(tenantId, messageConsumer, remoteClose -> {});
+        return helper.applicationClientFactory.createEventConsumer(tenantId, (Handler) messageConsumer, remoteClose -> {});
     }
 
     @Override

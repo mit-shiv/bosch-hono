@@ -63,7 +63,7 @@ public class EventConsumer extends DownstreamMessageConsumer {
         Objects.requireNonNull(tenantId);
         Objects.requireNonNull(messageHandler);
         Objects.requireNonNull(closeHandler);
-
+        System.out.println("Creating consumer...");
         final String topic = new HonoTopic(HonoTopic.Type.EVENT, tenantId).toString();
         final long pollTimeout = config.getPollTimeout();
 

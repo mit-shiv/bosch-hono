@@ -58,7 +58,8 @@ public class TelemetryCoapIT extends CoapTestBase {
             final String tenantId,
             final Handler<DownstreamMessage<AmqpMessageContext>> messageConsumer) {
 
-        return helper.amqpApplicationClient.createTelemetryConsumer(tenantId, messageConsumer, remoteClose -> {});
+        return helper.applicationClientFactory
+                .createTelemetryConsumer(tenantId, (Handler) messageConsumer, remoteClose -> {});
     }
 
     @Override

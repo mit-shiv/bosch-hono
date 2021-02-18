@@ -113,7 +113,7 @@ public class CommandAndControlMqttIT extends MqttTestBase {
     }
 
     private Future<MessageConsumer> createConsumer(final String tenantId, final Consumer<Message> messageConsumer) {
-        return helper.applicationClientFactory.createEventConsumer(tenantId, messageConsumer, remoteClose -> {});
+        return helper.cmdApplicationClientFactory.createEventConsumer(tenantId, messageConsumer, remoteClose -> {});
     }
 
     private Future<Void> subscribeToCommands(
@@ -381,7 +381,7 @@ public class CommandAndControlMqttIT extends MqttTestBase {
             // all commands should get rejected because they fail to pass the validity check
             ctx.failNow(new IllegalStateException("should not have received command"));
         }, endpointConfig, MqttQoS.AT_MOST_ONCE))
-        .compose(ok -> helper.applicationClientFactory.createGenericMessageSender(
+        .compose(ok -> helper.cmdApplicationClientFactory.createGenericMessageSender(
                 endpointConfig.getNorthboundEndpoint(), tenantId))
         .onComplete(setup.succeeding(genericSender -> {
             LOGGER.debug("created generic sender for sending commands [target address: {}]", linkTargetAddress);

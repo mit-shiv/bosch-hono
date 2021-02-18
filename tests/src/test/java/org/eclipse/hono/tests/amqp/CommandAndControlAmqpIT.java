@@ -104,7 +104,7 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
     }
 
     private Future<MessageConsumer> createEventConsumer(final String tenantId, final Consumer<Message> messageConsumer) {
-        return helper.applicationClientFactory.createEventConsumer(tenantId, messageConsumer, remoteClose -> {});
+        return helper.cmdApplicationClientFactory.createEventConsumer(tenantId, messageConsumer, remoteClose -> {});
     }
 
     private Future<ProtonReceiver> subscribeToCommands(
@@ -308,7 +308,7 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
 
         final VertxTestContext setup = new VertxTestContext();
 
-        final Future<MessageConsumer> asyncResponseConsumer = helper.applicationClientFactory.createAsyncCommandResponseConsumer(
+        final Future<MessageConsumer> asyncResponseConsumer = helper.cmdApplicationClientFactory.createAsyncCommandResponseConsumer(
                 tenantId,
                 replyId,
                 response -> {
@@ -319,7 +319,7 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
                     }
                 },
                 null);
-        final Future<AsyncCommandClient> asyncCommandClient = helper.applicationClientFactory.getOrCreateAsyncCommandClient(tenantId);
+        final Future<AsyncCommandClient> asyncCommandClient = helper.cmdApplicationClientFactory.getOrCreateAsyncCommandClient(tenantId);
 
         CompositeFuture.all(asyncResponseConsumer, asyncCommandClient).onComplete(setup.completing());
 
@@ -520,7 +520,7 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
                         .failNow(new IllegalStateException("should not have received command")));
                 return null;
             }))
-            .compose(ok -> helper.applicationClientFactory.createGenericMessageSender(
+            .compose(ok -> helper.cmdApplicationClientFactory.createGenericMessageSender(
                     endpointConfig.getNorthboundEndpoint(), tenantId))
             .map(s -> {
                 log.debug("created generic sender for sending commands [target address: {}]", targetAddress);
@@ -681,7 +681,8 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
         final long commandTimeout = IntegrationTestSupport.getSendCommandTimeout();
 
         final VertxTestContext commandClientCreation = new VertxTestContext();
-        final Future<CommandClient> commandClient = helper.applicationClientFactory.getOrCreateCommandClient(tenantId, "test-client")
+        final Future<CommandClient> commandClient = helper.cmdApplicationClientFactory
+                .getOrCreateCommandClient(tenantId, "test-client")
                 .onSuccess(c -> c.setRequestTimeout(commandTimeout))
                 .onComplete(commandClientCreation.completing());
 
@@ -775,7 +776,8 @@ public class CommandAndControlAmqpIT extends AmqpAdapterTestBase {
         final long commandTimeout = IntegrationTestSupport.getSendCommandTimeout();
 
         final VertxTestContext commandClientCreation = new VertxTestContext();
-        final Future<CommandClient> commandClient = helper.applicationClientFactory.getOrCreateCommandClient(tenantId, "test-client")
+        final Future<CommandClient> commandClient = helper.cmdApplicationClientFactory
+                .getOrCreateCommandClient(tenantId, "test-client")
                 .onSuccess(c -> c.setRequestTimeout(commandTimeout))
                 .onComplete(commandClientCreation.completing());
 

@@ -35,6 +35,7 @@ import javax.security.auth.x500.X500Principal;
 import org.apache.qpid.proton.message.Message;
 import org.eclipse.hono.application.client.DownstreamMessage;
 import org.eclipse.hono.application.client.MessageConsumer;
+import org.eclipse.hono.application.client.MessageContext;
 import org.eclipse.hono.application.client.amqp.AmqpMessageContext;
 import org.eclipse.hono.service.management.device.Device;
 import org.eclipse.hono.service.management.tenant.Tenant;
@@ -60,6 +61,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.vertx.core.CompositeFuture;
+import io.vertx.core.Context;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.MultiMap;
@@ -104,7 +106,7 @@ public abstract class HttpTestBase {
     private static final String COMMAND_JSON_KEY = "brightness";
 
     private static final String ORIGIN_WILDCARD = "*";
-    private static final long  TEST_TIMEOUT_MILLIS = 20000; // 20 seconds
+    private static final long  TEST_TIMEOUT_MILLIS = 40000; // 20 seconds
 
     /**
      * The default options to use for creating HTTP clients.
@@ -245,7 +247,7 @@ public abstract class HttpTestBase {
      */
     protected abstract Future<MessageConsumer> createConsumer(
             String tenantId,
-            Handler<DownstreamMessage<AmqpMessageContext>> messageConsumer);
+            Handler<DownstreamMessage<MessageContext>> messageConsumer);
 
     /**
      * Perform additional checks on a received message.
@@ -256,7 +258,7 @@ public abstract class HttpTestBase {
      * @param msg The message to perform checks on.
      * @throws RuntimeException if any of the checks fail.
      */
-    protected void assertAdditionalMessageProperties(final DownstreamMessage<AmqpMessageContext> msg) {
+    protected void assertAdditionalMessageProperties(final DownstreamMessage msg) {
         // empty
     }
 
@@ -496,7 +498,7 @@ public abstract class HttpTestBase {
     protected void testUploadMessages(
             final VertxTestContext ctx,
             final String tenantId,
-            final Function<Message, Future<?>> messageConsumer,
+            final Function<DownstreamMessage, Future<?>> messageConsumer,
             final Function<Integer, Future<HttpResponse<Buffer>>> requestSender) throws InterruptedException {
         testUploadMessages(ctx, tenantId, messageConsumer, requestSender, MESSAGES_TO_SEND, null);
     }
@@ -532,7 +534,7 @@ public abstract class HttpTestBase {
     protected void testUploadMessages(
             final VertxTestContext ctx,
             final String tenantId,
-            final Function<Message, Future<?>> messageConsumer,
+            final Function<DownstreamMessage, Future<?>> messageConsumer,
             final Function<Integer, Future<HttpResponse<Buffer>>> requestSender,
             final int numberOfMessages,
             final QoS expectedQos) throws InterruptedException {
@@ -552,7 +554,7 @@ public abstract class HttpTestBase {
                 assertAdditionalMessageProperties(msg);
             });
             Optional.ofNullable(messageConsumer)
-                .map(consumer -> consumer.apply(msg.getMessageContext().getRawMessage()))
+                .map(consumer -> consumer.apply(msg))
                 .orElseGet(() -> Future.succeededFuture())
                 .onComplete(attempt -> {
                     if (attempt.succeeded()) {
@@ -563,9 +565,9 @@ public abstract class HttpTestBase {
                         messageSending.failNow(attempt.cause());
                     }
             });
-            if (receivedMessageCount.get() % 20 == 0) {
+//            if (receivedMessageCount.get() % 20 == 0) {
                 logger.info("messages received: {}", receivedMessageCount.get());
-            }
+//            }
         }).onComplete(setup.completing());
 
         assertThat(setup.awaitCompletion(5, TimeUnit.SECONDS)).isTrue();
@@ -888,29 +890,32 @@ public abstract class HttpTestBase {
     @Test
     public void testAutoProvisioningViaGateway(final VertxTestContext ctx) throws InterruptedException {
 
-        final Tenant tenant = new Tenant();
-        final String gatewayId = helper.getRandomDeviceId(tenantId);
-        final Device gateway = new Device()
-                .setAuthorities(Collections.singleton(RegistryManagementConstants.AUTHORITY_AUTO_PROVISIONING_ENABLED));
+        final Context runCtx = vertx.getOrCreateContext();
+        runCtx.runOnContext(v -> {
+            final Tenant tenant = new Tenant();
+            final String gatewayId = helper.getRandomDeviceId(tenantId);
+            final Device gateway = new Device()
+                    .setAuthorities(Collections.singleton(RegistryManagementConstants.AUTHORITY_AUTO_PROVISIONING_ENABLED));
 
-        final String edgeDeviceId = helper.getRandomDeviceId(tenantId);
-        helper.createAutoProvisioningMessageConsumers(ctx, tenantId, edgeDeviceId)
-                .compose(ok -> helper.registry.addDeviceForTenant(tenantId, tenant, gatewayId, gateway, PWD))
-                .compose(ok -> {
-                    final MultiMap requestHeaders = MultiMap.caseInsensitiveMultiMap()
-                            .add(HttpHeaders.CONTENT_TYPE, "text/plain")
-                            .add(HttpHeaders.AUTHORIZATION, getBasicAuth(tenantId, gatewayId, PWD))
-                            .add(HttpHeaders.ORIGIN, ORIGIN_URI);
+            final String edgeDeviceId = helper.getRandomDeviceId(tenantId);
+            helper.createAutoProvisioningMessageConsumers(ctx, tenantId, edgeDeviceId)
+                    .compose(ok -> helper.registry.addDeviceForTenant(tenantId, tenant, gatewayId, gateway, PWD))
+                    .compose(ok -> {
+                        final MultiMap requestHeaders = MultiMap.caseInsensitiveMultiMap()
+                                .add(HttpHeaders.CONTENT_TYPE, "text/plain")
+                                .add(HttpHeaders.AUTHORIZATION, getBasicAuth(tenantId, gatewayId, PWD))
+                                .add(HttpHeaders.ORIGIN, ORIGIN_URI);
 
-                    final String uri = String.format("%s/%s/%s", getEndpointUri(), tenantId, edgeDeviceId);
+                        final String uri = String.format("%s/%s/%s", getEndpointUri(), tenantId, edgeDeviceId);
 
-                    return httpClient.update(
-                            uri,
-                            Buffer.buffer("hello"),
-                            requestHeaders,
-                            ResponsePredicate.status(HttpURLConnection.HTTP_ACCEPTED));
-                })
-                .onComplete(ctx.succeeding());
+                        return httpClient.update(
+                                uri,
+                                Buffer.buffer("hello"),
+                                requestHeaders,
+                                ResponsePredicate.status(HttpURLConnection.HTTP_ACCEPTED));
+                    })
+                    .onComplete(ctx.succeeding());
+        });
     }
 
     /**
@@ -934,14 +939,9 @@ public abstract class HttpTestBase {
         final VertxTestContext setup = new VertxTestContext();
         helper.registry.addDeviceForTenant(tenantId, tenant, deviceId, PWD)
         .compose(ok -> createConsumer(tenantId, msg -> {
-            final var rawMessage = msg.getMessageContext().getRawMessage();
-            logger.trace("received message: {}", rawMessage);
-            TimeUntilDisconnectNotification.fromMessage(rawMessage).ifPresent(notification -> {
-                logger.debug("processing piggy backed message [ttd: {}]", notification.getTtd());
-                ctx.verify(() -> {
-                    assertThat(notification.getTenantId()).isEqualTo(tenantId);
-                    assertThat(notification.getDeviceId()).isEqualTo(deviceId);
-                });
+            logger.trace("received message: {}", msg);
+            ctx.verify(() -> {
+                IntegrationTestSupport.assertTelemetryMessageProperties(msg, tenantId);
             });
             switch (msg.getContentType()) {
             case "text/msg1":
@@ -1065,16 +1065,10 @@ public abstract class HttpTestBase {
                 msg -> {
                     // do NOT send a command, but let the HTTP adapter's timer expire
                     logger.trace("received message");
-                    return TimeUntilDisconnectNotification.fromMessage(msg)
-                    .map(notification -> {
-                        ctx.verify(() -> {
-                            assertThat(notification.getTtd()).isEqualTo(2);
-                            assertThat(notification.getTenantId()).isEqualTo(tenantId);
-                            assertThat(notification.getDeviceId()).isEqualTo(deviceId);
-                        });
-                        return Future.succeededFuture();
-                    })
-                    .orElseGet(() -> Future.succeededFuture());
+                    ctx.verify(() -> {
+                       IntegrationTestSupport.assertTelemetryMessageProperties(msg, tenantId);
+                    });
+                    return Future.succeededFuture();
                 },
                 count -> {
                     return httpClient.create(
@@ -1149,35 +1143,30 @@ public abstract class HttpTestBase {
         final AtomicInteger counter = new AtomicInteger();
         testUploadMessages(ctx, tenantId,
                 msg -> {
+                    ctx.verify(() -> {
+                        IntegrationTestSupport.assertTelemetryMessageProperties(msg, tenantId);
+                    });
 
-                    return TimeUntilDisconnectNotification.fromMessage(msg)
-                            .map(notification -> {
-                                logger.trace("received piggy backed message [ttd: {}]: {}", notification.getTtd(), msg);
+                    // now ready to send a command
+                    final JsonObject inputData = new JsonObject().put(COMMAND_JSON_KEY, (int) (Math.random() * 100));
+                    return helper.sendCommand(
+                            tenantId,
+                            commandTargetDeviceId,
+                            COMMAND_TO_SEND,
+                            "application/json",
+                            inputData.toBuffer(),
+                            // set "forceCommandRerouting" message property so that half the command are rerouted via the AMQP network
+                            IntegrationTestSupport.newCommandMessageProperties(() -> counter.getAndIncrement() >= MESSAGES_TO_SEND / 2),
+                            TimeUnit.MILLISECONDS.convert(msg.getTimeTillDisconnect(), TimeUnit.SECONDS))
+                            .map(response -> {
                                 ctx.verify(() -> {
-                                    assertThat(notification.getTenantId()).isEqualTo(tenantId);
-                                    assertThat(notification.getDeviceId()).isEqualTo(subscribingDeviceId);
+                                    assertThat(response.getContentType()).isEqualTo("text/plain");
+                                    assertThat(response.getApplicationProperty(MessageHelper.APP_PROPERTY_DEVICE_ID, String.class)).isEqualTo(commandTargetDeviceId);
+                                    assertThat(response.getApplicationProperty(MessageHelper.APP_PROPERTY_TENANT_ID, String.class)).isEqualTo(tenantId);
                                 });
-                                // now ready to send a command
-                                final JsonObject inputData = new JsonObject().put(COMMAND_JSON_KEY, (int) (Math.random() * 100));
-                                return helper.sendCommand(
-                                        tenantId,
-                                        commandTargetDeviceId,
-                                        COMMAND_TO_SEND,
-                                        "application/json",
-                                        inputData.toBuffer(),
-                                        // set "forceCommandRerouting" message property so that half the command are rerouted via the AMQP network
-                                        IntegrationTestSupport.newCommandMessageProperties(() -> counter.getAndIncrement() >= MESSAGES_TO_SEND / 2),
-                                        notification.getMillisecondsUntilExpiry())
-                                        .map(response -> {
-                                            ctx.verify(() -> {
-                                                assertThat(response.getContentType()).isEqualTo("text/plain");
-                                                assertThat(response.getApplicationProperty(MessageHelper.APP_PROPERTY_DEVICE_ID, String.class)).isEqualTo(commandTargetDeviceId);
-                                                assertThat(response.getApplicationProperty(MessageHelper.APP_PROPERTY_TENANT_ID, String.class)).isEqualTo(tenantId);
-                                            });
-                                            return response;
-                                        });
-                            })
-                            .orElseGet(() -> Future.succeededFuture());
+                                return response;
+                            });
+
                 },
                 count -> {
                     final Buffer buffer = Buffer.buffer("hello " + count);
@@ -1263,27 +1252,21 @@ public abstract class HttpTestBase {
         final AtomicInteger counter = new AtomicInteger();
         testUploadMessages(ctx, tenantId,
                 msg -> {
-                    return TimeUntilDisconnectNotification.fromMessage(msg)
-                            .map(notification -> {
+                    ctx.verify(() -> {
+                        IntegrationTestSupport.assertTelemetryMessageProperties(msg, tenantId);
+                    });
 
-                                logger.trace("received piggy backed message [ttd: {}]: {}", notification.getTtd(), msg);
-                                ctx.verify(() -> {
-                                    assertThat(notification.getTenantId()).isEqualTo(tenantId);
-                                    assertThat(notification.getDeviceId()).isEqualTo(subscribingDeviceId);
-                                });
-                                // now ready to send a command
-                                final JsonObject inputData = new JsonObject().put(COMMAND_JSON_KEY, (int) (Math.random() * 100));
-                                return helper.sendOneWayCommand(
-                                        tenantId,
-                                        commandTargetDeviceId,
-                                        COMMAND_TO_SEND,
-                                        "application/json",
-                                        inputData.toBuffer(),
-                                        // set "forceCommandRerouting" message property so that half the command are rerouted via the AMQP network
-                                        IntegrationTestSupport.newCommandMessageProperties(() -> counter.getAndIncrement() >= MESSAGES_TO_SEND / 2),
-                                        notification.getMillisecondsUntilExpiry());
-                            })
-                            .orElseGet(() -> Future.succeededFuture());
+                    // now ready to send a command
+                    final JsonObject inputData = new JsonObject().put(COMMAND_JSON_KEY, (int) (Math.random() * 100));
+                    return helper.sendOneWayCommand(
+                            tenantId,
+                            commandTargetDeviceId,
+                            COMMAND_TO_SEND,
+                            "application/json",
+                            inputData.toBuffer(),
+                            // set "forceCommandRerouting" message property so that half the command are rerouted via the AMQP network
+                            IntegrationTestSupport.newCommandMessageProperties(() -> counter.getAndIncrement() >= MESSAGES_TO_SEND / 2),
+                            TimeUnit.MILLISECONDS.convert(msg.getTimeTillDisconnect(), TimeUnit.SECONDS));
                 },
                 count -> {
                     final Buffer payload = Buffer.buffer("hello " + count);
