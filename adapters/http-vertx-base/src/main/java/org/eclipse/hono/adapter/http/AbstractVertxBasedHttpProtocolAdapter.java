@@ -731,8 +731,8 @@ public abstract class AbstractVertxBasedHttpProtocolAdapter<T extends HttpProtoc
                 final CommandContext commandContext = ctx.get(CommandContext.KEY_COMMAND_CONTEXT);
                 setResponsePayload(ctx.response(), commandContext, currentSpan);
                 ctx.getRoutingContext().addBodyEndHandler(ok -> {
-                    log.trace("successfully processed [{}] message for device [tenantId: {}, deviceId: {}]",
-                            endpoint, tenant, deviceId);
+                    log.trace("successfully processed [{}] message for device [tenantId: {}, deviceId: {}]: {}",
+                            endpoint, tenant, deviceId, payload != null ? payload.toString() : null);
                     if (commandContext != null) {
                         commandContext.getTracingSpan().log("forwarded command to device in HTTP response body");
                         commandContext.accept();
