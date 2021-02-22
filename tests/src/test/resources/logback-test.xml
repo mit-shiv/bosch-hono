@@ -55,7 +55,7 @@
   <!--logger name="org.apache.kafka" level="DEBUG"/>
   <logger name="org.apache.kafka.clients.producer.ProducerConfig" level="WARN"/>
   <logger name="org.apache.kafka.clients.consumer.ConsumerConfig" level="WARN"/>
-  <logger name="io.vertx.kafka" level="TRACE"/>
-  <logger name="org.eclipse.hono.client.kafka.consumer" level="DEBUG"/ -->
+  <logger name="io.vertx.kafka" level="TRACE"/ -->
+  <logger name="org.eclipse.hono.client.kafka.consumer" level="DEBUG"/>
 
 </configuration>
