@@ -547,7 +547,7 @@ public abstract class HttpTestBase {
         final VertxTestContext setup = new VertxTestContext();
 
         createConsumer(tenantId, msg -> {
-            logger.info("received {}", msg);
+            logger.info("received {}", new String(msg.getPayload().getBytes()));
             ctx.verify(() -> {
                 IntegrationTestSupport.assertTelemetryMessageProperties(msg, tenantId);
                 assertThat(msg.getQos()).isEqualTo(getExpectedQoS(expectedQos));
