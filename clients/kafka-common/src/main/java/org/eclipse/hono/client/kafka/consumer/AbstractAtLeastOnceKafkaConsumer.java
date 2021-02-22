@@ -15,20 +15,25 @@ package org.eclipse.hono.client.kafka.consumer;
 
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.apache.kafka.common.errors.TimeoutException;
 import org.eclipse.hono.util.Lifecycle;
+import org.eclipse.hono.util.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.kafka.client.common.PartitionInfo;
 import io.vertx.kafka.client.common.TopicPartition;
 import io.vertx.kafka.client.consumer.KafkaConsumer;
 import io.vertx.kafka.client.consumer.KafkaConsumerRecord;
@@ -206,15 +211,27 @@ public abstract class AbstractAtLeastOnceKafkaConsumer<T> implements Lifecycle {
             kafkaConsumer.subscribe(topicPattern, promise);
         }
 
-        return promise.future()
-                .compose(v -> {
-                    final Promise<KafkaConsumerRecords<String, Buffer>> pollPromise = Promise.promise();
-                    kafkaConsumer.poll(pollTimeout, pollPromise);
-                    return pollPromise.future()
-                            .onSuccess(this::handleBatch) // do not wait for the processing to finish
-                            .recover(cause -> Future.failedFuture(new KafkaConsumerPollException(cause)))
-                            .mapEmpty();
-                });
+        final Set<Pair<String, Promise<List<PartitionInfo>>>> topicPartitionPromises = topics.stream()
+                .map(topic -> Pair.of(topic, Promise.<List<PartitionInfo>>promise()))
+                .collect(Collectors.toSet());
+
+        topicPartitionPromises.stream()
+                .forEach(topicPartitionPromise -> kafkaConsumer.partitionsFor(topicPartitionPromise.one(), topicPartitionPromise.two()));
+
+        final List<Future> collect = topicPartitionPromises.stream()
+                .map(topicPartitionPromise -> topicPartitionPromise.two().future())
+                .collect(Collectors.toList());
+
+        final Promise<KafkaConsumerRecords<String, Buffer>> pollPromise = Promise.promise();
+        CompositeFuture.all(collect)
+            .onSuccess(v -> {
+                pollPromise.future()
+                        .onSuccess(this::handleBatch) // do not wait for the processing to finish
+                        .recover(cause -> Future.failedFuture(new KafkaConsumerPollException(cause)));
+                kafkaConsumer.poll(pollTimeout, pollPromise);
+            });
+
+        return CompositeFuture.all(promise.future(), pollPromise.future()).mapEmpty();
     }
 
     /**
