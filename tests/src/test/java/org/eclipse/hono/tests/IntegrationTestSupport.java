@@ -558,6 +558,7 @@ public final class IntegrationTestSupport {
         final KafkaConsumerConfigProperties consumerConfig = new KafkaConsumerConfigProperties();
         consumerConfig.setConsumerConfig(Map.of(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, IntegrationTestSupport.DOWNSTREAM_BOOTSTRAP_SERVERS,
+                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest",
                 ConsumerConfig.GROUP_ID_CONFIG, "its-" + UUID.randomUUID()));
         return consumerConfig;
     }
