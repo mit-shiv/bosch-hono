@@ -17,7 +17,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anySet;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -37,11 +36,9 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
-import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.eclipse.hono.test.VertxMockSupport;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.internal.verification.VerificationModeFactory;
@@ -49,7 +46,6 @@ import org.mockito.internal.verification.VerificationModeFactory;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
-import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
 import io.vertx.junit5.Timeout;
@@ -149,12 +145,6 @@ public class AbstractAtLeastOnceKafkaConsumerMockitoTest {
                     promise.handle(Future.succeededFuture());
                     return mockKafkaConsumer;
                 });
-
-        doAnswer(invocation -> {
-            final Promise<Map<TopicPartition, OffsetAndMetadata>> promise = invocation.getArgument(1);
-            promise.handle(Future.succeededFuture());
-            return mockKafkaConsumer;
-        }).when(mockKafkaConsumer).partitionsFor(anyString(), VertxMockSupport.anyHandler());
 
         doAnswer(invocation -> {
             final Promise<Map<TopicPartition, OffsetAndMetadata>> promise = invocation.getArgument(1);

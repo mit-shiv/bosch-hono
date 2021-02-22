@@ -14,13 +14,7 @@
 package org.eclipse.hono.client.kafka.consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.when;
 
-import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -35,18 +29,13 @@ import org.apache.kafka.clients.consumer.OffsetResetStrategy;
 import org.apache.kafka.common.KafkaException;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.errors.AuthenticationException;
-import org.assertj.core.util.Lists;
-import org.eclipse.hono.test.VertxMockSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.stubbing.Answer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.vertx.core.Future;
 import io.vertx.core.Handler;
-import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.json.JsonObject;
@@ -79,15 +68,13 @@ public class AbstractAtLeastOnceKafkaConsumerKafkaMockConsumerTest {
 
     }
 
-    // FIXME: How to un-ignore? Is necessary due to a bug (NPE) in KafkaConsumerImpl 409 where a null check is missing
-
     /**
      * Verifies that the underlying Kafka consumer is closed when {@link AbstractAtLeastOnceKafkaConsumer#stop()} is
      * invoked.
      *
      * @param ctx The vert.x test context.
      */
-    //@Test
+    @Test
     public void testThatStopClosesConsumer(final VertxTestContext ctx) {
         final AbstractAtLeastOnceKafkaConsumer<JsonObject> underTest = new TestConsumer(vertxKafkaConsumer, TOPIC);
         underTest.start()
@@ -107,7 +94,7 @@ public class AbstractAtLeastOnceKafkaConsumerKafkaMockConsumerTest {
      *
      * @param ctx The vert.x test context.
      */
-    //@Test
+    @Test
     public void testThatStartFailsIfConsumerIsAlreadyStopped(final VertxTestContext ctx) {
         // GIVEN a started consumer
         final AbstractAtLeastOnceKafkaConsumer<JsonObject> underTest = new TestConsumer(vertxKafkaConsumer, TOPIC);
@@ -129,7 +116,7 @@ public class AbstractAtLeastOnceKafkaConsumerKafkaMockConsumerTest {
      *
      * @param ctx The vert.x test context.
      */
-    //@Test
+    @Test
     public void testThatStartFailsIfFirstPollFails(final VertxTestContext ctx) {
         final AuthenticationException authenticationException = new AuthenticationException("auth failed");
 
@@ -154,7 +141,7 @@ public class AbstractAtLeastOnceKafkaConsumerKafkaMockConsumerTest {
      *
      * @param ctx The vert.x test context.
      */
-    //@Test
+    @Test
     public void testThatPollErrorClosesConsumer(final VertxTestContext ctx) {
         final AtomicReference<TestConsumer> testConsumerRef = new AtomicReference<>();
         final KafkaException pollError = new KafkaException("error");
@@ -190,7 +177,7 @@ public class AbstractAtLeastOnceKafkaConsumerKafkaMockConsumerTest {
      *
      * @param ctx The vert.x test context.
      */
-    //@Test
+    @Test
     public void testThatConsumedMessagesAreProcessedInOrder(final VertxTestContext ctx) {
         final int numberOfBatches = 11;
         final int recordsPerBatch = 20;
@@ -237,7 +224,7 @@ public class AbstractAtLeastOnceKafkaConsumerKafkaMockConsumerTest {
      *
      * @param ctx The vert.x test context.
      */
-    //@Test
+    @Test
     public void testThatErrorInMessageHandlerCausesRedelivery(final VertxTestContext ctx) {
         final int recordsPerBatch = 20;
         final int failingMessageOffset = recordsPerBatch - 1;
