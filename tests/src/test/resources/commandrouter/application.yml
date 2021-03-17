@@ -43,3 +43,14 @@ hono:
 spring:
   jmx:
     enabled: false
+
+---
+
+spring:
+  profiles: kafka
+hono:
+  command:
+    kafka:
+      commonClientConfig:
+        bootstrap:
+          servers: ${hono.kafka.bootstrap.servers}

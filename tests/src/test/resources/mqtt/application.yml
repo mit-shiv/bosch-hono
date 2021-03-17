@@ -110,6 +110,6 @@ spring:
   profiles: kafka
 hono:
   kafka:
-    producerConfig:
+    commonClientConfig:
       bootstrap:
         servers: ${hono.kafka.bootstrap.servers}

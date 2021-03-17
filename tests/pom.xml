@@ -70,7 +70,7 @@ Test cases are run against Docker images of Hono server + (Apache Qpid Dispatch 
     -->
     <link.establishment.timeout>5000</link.establishment.timeout>
     <flow.latency>1000</flow.latency>
-    <request.timeout>500</request.timeout>
+    <request.timeout>5000</request.timeout>
     <adapter.sendMessageToDeviceTimeout>1000</adapter.sendMessageToDeviceTimeout>
     <!-- use minimum cost factor in order to speed up test execution -->
     <max.bcrypt.costFactor>4</max.bcrypt.costFactor>
@@ -1172,7 +1172,7 @@ Test cases are run against Docker images of Hono server + (Apache Qpid Dispatch 
                     <env>
                       <LOGGING_CONFIG>file:///etc/hono/logback-spring.xml</LOGGING_CONFIG>
                       <SPRING_CONFIG_LOCATION>file:///etc/hono/</SPRING_CONFIG_LOCATION>
-                      <SPRING_PROFILES_ACTIVE>${logging.profile},embedded-cache,enable-device-connection-endpoint</SPRING_PROFILES_ACTIVE>
+                      <SPRING_PROFILES_ACTIVE>${messaging.profile}${logging.profile},embedded-cache,enable-device-connection-endpoint</SPRING_PROFILES_ACTIVE>
                       <JDK_JAVA_OPTIONS>${default.java.options}</JDK_JAVA_OPTIONS>
                       <PN_TRACE_FRM>0</PN_TRACE_FRM>
                       <JAEGER_SERVICE_NAME>command-router</JAEGER_SERVICE_NAME>
