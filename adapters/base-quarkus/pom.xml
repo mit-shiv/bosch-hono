@@ -211,7 +211,8 @@
       <properties>
         <quarkus.native.additional-build-args>--initialize-at-run-time=io.netty.internal.tcnative.SSL, -H:ResourceConfigurationFiles=resources-config.json, -H:ReflectionConfigurationFiles=reflection-config.json</quarkus.native.additional-build-args>
         <!-- build native image inside of a container, doesn't require GraalVM SDK to be installed locally -->
-        <quarkus.native.container-build>true</quarkus.native.container-build>
+        <quarkus.native.remote-container-build>true</quarkus.native.remote-container-build>
+        <quarkus.native.container-runtime>docker</quarkus.native.container-runtime>
         <quarkus.package.type>native</quarkus.package.type>
         <!--  include all JSSE related classes -->
         <quarkus.native.enable-all-security-services>true</quarkus.native.enable-all-security-services>
