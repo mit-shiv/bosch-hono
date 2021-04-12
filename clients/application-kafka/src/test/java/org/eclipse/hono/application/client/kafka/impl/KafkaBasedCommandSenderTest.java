@@ -57,7 +57,7 @@ import io.vertx.kafka.client.consumer.KafkaConsumer;
  *
  */
 @ExtendWith(VertxExtension.class)
-@Timeout(value = 5, timeUnit = TimeUnit.SECONDS)
+@Timeout(value = 10, timeUnit = TimeUnit.SECONDS)
 public class KafkaBasedCommandSenderTest {
     private KafkaBasedCommandSender commandSender;
     private KafkaConsumerConfigProperties consumerConfig;
