@@ -13,7 +13,10 @@
 
 package org.eclipse.hono.adapter.metric;
 
+import java.util.Objects;
+
 import org.eclipse.hono.service.metric.MetricsTags;
+import org.eclipse.hono.util.ExecutionContext;
 import org.eclipse.hono.util.TenantObject;
 
 import io.micrometer.core.instrument.Timer.Sample;
@@ -22,6 +25,8 @@ import io.micrometer.core.instrument.Timer.Sample;
  * A collector for metrics.
  */
 public interface Metrics {
+
+    String KEY_MICROMETER_SAMPLE = "micrometer.sample";
 
     /**
      * Reports a newly established connection with an authenticated device.
@@ -73,6 +78,33 @@ public interface Metrics {
      * @return The newly created timer.
      */
     Sample startTimer();
+
+    /**
+     * Starts a new timer and puts it to an execution context.
+     * <p>
+     * The timer can later be retrieved from the context using {@link #getTimer(ExecutionContext)}.
+     *
+     * @param executionContext The context to put the timer to.
+     * @return The newly created timer.
+     * @throws NullPointerException if context is {@code null}.
+     */
+    default Sample startTimer(final ExecutionContext executionContext) {
+        Objects.requireNonNull(executionContext);
+        final var timer = startTimer();
+        executionContext.put(KEY_MICROMETER_SAMPLE, timer);
+        return timer;
+    }
+
+    /**
+     * Gets a timer from an execution context.
+     *
+     * @param executionContext The context to retrieve the timer from.
+     * @return The timer or {@code null} if the context does not contain a timer.
+     * @throws NullPointerException if context is {@code null}.
+     */
+    default Sample getTimer(final ExecutionContext executionContext) {
+        return executionContext.get(KEY_MICROMETER_SAMPLE);
+    }
 
     /**
      * Reports a telemetry message or event received from a device. 

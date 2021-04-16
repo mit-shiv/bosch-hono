@@ -16,7 +16,6 @@ package org.eclipse.hono.tests.coap.lwm2m;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.security.PublicKey;
@@ -26,15 +25,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
-import org.eclipse.californium.core.CoapClient;
-import org.eclipse.californium.core.coap.CoAP.Code;
-import org.eclipse.californium.core.coap.CoAP.ResponseCode;
-import org.eclipse.californium.core.coap.OptionSet;
-import org.eclipse.californium.core.coap.Request;
 import org.eclipse.californium.core.network.config.NetworkConfig;
 import org.eclipse.californium.elements.Connector;
-import org.eclipse.californium.elements.exception.ConnectorException;
 import org.eclipse.californium.scandium.DTLSConnector;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
 import org.eclipse.californium.scandium.dtls.ClientHandshaker;
@@ -68,12 +62,13 @@ import org.eclipse.leshan.core.model.ObjectModel;
 import org.eclipse.leshan.core.model.StaticModel;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
+import org.eclipse.leshan.core.node.codec.LwM2mNodeDecoder;
+import org.eclipse.leshan.core.node.codec.LwM2mNodeEncoder;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.request.RegisterRequest;
 import org.eclipse.leshan.core.request.UpdateRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.slf4j.Logger;
@@ -81,6 +76,9 @@ import org.slf4j.LoggerFactory;
 
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Promise;
+import io.vertx.core.json.JsonArray;
+import io.vertx.core.json.JsonObject;
+import io.vertx.core.json.pointer.JsonPointer;
 import io.vertx.junit5.Checkpoint;
 import io.vertx.junit5.Timeout;
 import io.vertx.junit5.VertxExtension;
@@ -94,6 +92,12 @@ import io.vertx.junit5.VertxTestContext;
 public class LwM2mIT extends CoapTestBase {
 
     private static final Logger LOG = LoggerFactory.getLogger(LwM2mIT.class);
+
+    // Initialize model
+    private final List<ObjectModel> models = ObjectLoader.loadDefault();
+    private final LwM2mModel model = new StaticModel(models);
+    private final LwM2mNodeEncoder nodeEncoder = new DefaultLwM2mNodeEncoder();
+    private final LwM2mNodeDecoder nodeDecoder = new DefaultLwM2mNodeDecoder();
 
     private LeshanClient client;
     private ExampleDevice deviceObject;
@@ -117,8 +121,8 @@ public class LwM2mIT extends CoapTestBase {
      * registration and unregister using the CoAP adapter's resource directory resource.
      * <p>
      * Also verifies that registration, updating the registration and de-registration trigger empty downstream
-     * notifications with a TTD reflecting the device's lifetime and that the adapter establishes observations
-     * for resources configured for the device.
+     * notifications with a TTD reflecting the device's lifetime and that the adapter establishes an
+     * observation on the device's LwM2M <em>Device</em> object.
      *
      * @param ctx The vert.x test context.
      */
@@ -128,7 +132,6 @@ public class LwM2mIT extends CoapTestBase {
 
         final Checkpoint deviceAcceptsCommands = ctx.checkpoint(2);
         final Checkpoint deviceNoLongerAcceptsCommands = ctx.checkpoint();
-        final Promise<Void> firmwareNotificationReceived = Promise.promise();
         final Promise<Void> deviceNotificationReceived = Promise.promise();
 
         final int lifetime = 24 * 60 * 60; // 24h
@@ -143,22 +146,12 @@ public class LwM2mIT extends CoapTestBase {
                         logger.info("received event [content-type: {}, orig_address: {}]", msg.getContentType(), origAddress);
                         Optional.ofNullable(msg.getTimeTillDisconnect())
                             .ifPresent(ttd -> {
-                                switch (ttd) {
-                                case lifetime:
+                                if (ttd == lifetime) {
                                     deviceAcceptsCommands.flag();
-                                    break;
-                                case 0:
+                                } else if (ttd == 0) {
                                     deviceNoLongerAcceptsCommands.flag();
-                                    // fall through
-                                default:
-                                    break;
                                 }
                             });
-                        if (msg.getContentType().startsWith("application/vnd.oma.lwm2m")) {
-                            Optional.ofNullable(origAddress)
-                                .filter(s -> s.equals("/5/0"))
-                                .ifPresent(s -> firmwareNotificationReceived.complete());
-                        }
                     },
                     remoteClose -> {}))
             .compose(eventConsumer -> helper.applicationClient.createTelemetryConsumer(
@@ -198,8 +191,7 @@ public class LwM2mIT extends CoapTestBase {
                 client.start();
                 return CompositeFuture.all(
                         registered.future(),
-                        deviceNotificationReceived.future(),
-                        firmwareNotificationReceived.future());
+                        deviceNotificationReceived.future());
             })
             .compose(ok -> {
                 final Promise<Void> updated = Promise.promise();
@@ -218,42 +210,223 @@ public class LwM2mIT extends CoapTestBase {
     }
 
     /**
-     * Verifies that a de-registration request to the CoAP adapter's resource directory
-     * resource triggers an event with a TTD.
+     * Verifies that a LwM2M device using binding mode <em>U</em> can successfully register, update its
+     * registration and unregister using the CoAP adapter's resource directory resource.
+     * <p>
+     * Also verifies that registration, updating the registration and de-registration trigger empty downstream
+     * notifications with a TTD reflecting the device's lifetime and that the adapter establishes observations
+     * for resources configured for the device.
      *
      * @param ctx The vert.x test context.
-     * @throws InterruptedException if the fixture cannot be created.
-     * @throws ConnectorException if the CoAP adapter is not available.
-     * @throws IOException if the CoAP adapter is not available.
      */
     @Test
-    @Disabled
     @Timeout(value = 5, timeUnit = TimeUnit.SECONDS)
-    public void testDeregistrationTriggersEvent(final VertxTestContext ctx) throws InterruptedException, ConnectorException, IOException {
+    public void testFirmwarePackageUriUpdate(final VertxTestContext ctx) {
 
-        final Checkpoint notificationReceived = ctx.checkpoint();
+        final int lifetime = 24 * 60 * 60; // 24h
+        final int communicationPeriod = 300_000; // update registration every 5m
+        final String endpoint = "test-device";
+        final Promise<Void> stateDownloadingReached = Promise.promise();
+        final Promise<Void> updateTriggered = Promise.promise();
+        final Promise<Void> stateInstallingReached = Promise.promise();
+        final var stateFinishedReached = ctx.checkpoint();
+        final Promise<String> packageUriSet = Promise.promise();
+        final AtomicReference<String> currentStatus = new AtomicReference<>();
+        final var uri = "https://firmware.eclipse.org/tenant/device";
 
         helper.registry.addPskDeviceForTenant(tenantId, new Tenant(), deviceId, SECRET)
-        .compose(ok -> helper.applicationClient.createEventConsumer(
-                tenantId,
-                msg -> {
-                    logger.trace("received event: {}", msg);
-                    msg.getTimeUntilDisconnectNotification()
-                        .ifPresent(notification -> {
-                            ctx.verify(() -> assertThat(notification.getTtd()).isEqualTo(0));
-                            notificationReceived.flag();
-                        });
-                },
-                remoteClose -> {}))
-        .compose(c -> {
-            final CoapClient client = getCoapsClient(deviceId, tenantId, SECRET);
-            final Request request = new Request(Code.DELETE);
-            request.setURI(getCoapsRequestUri(String.format("/rd/%s:%s", tenantId, deviceId)));
-            final Promise<OptionSet> result = Promise.promise();
-            client.advanced(getHandler(result, ResponseCode.DELETED), request);
-            return result.future();
-        })
-        .onComplete(ctx.completing());
+            .compose(ok -> helper.applicationClient.createEventConsumer(
+                    tenantId,
+                    msg -> {
+                        final String origAddress = msg.getProperties().getProperty(MessageHelper.APP_PROPERTY_ORIG_ADDRESS, String.class);
+                        logger.info("received event [content-type: {}, orig_address: {}]", msg.getContentType(), origAddress);
+                        if (msg.getContentType().equals("application/vnd.eclipse.ditto+json")) {
+                            ctx.verify(() -> {
+                                final var dittoMessage = msg.getPayload().toJsonObject();
+                                assertThat(dittoMessage.getString("topic"))
+                                    .isEqualTo(String.format("test/%s:%s/things/twin/commands/merge", tenantId, deviceId));
+                                final String newStatus = (String) JsonPointer.from("/value/lastOperation/status").queryJson(dittoMessage);
+                                if (newStatus.equals(currentStatus.get())) {
+                                    LOG.info("ignoring notification with unchanged status");
+                                } else {
+                                    LOG.info("received status update notification from device [current status: {}, new status: {}]",
+                                            currentStatus.get(), newStatus);
+                                    if (currentStatus.compareAndSet(null, newStatus)) {
+                                        assertThat(newStatus).isEqualTo("STARTED");
+                                        LOG.info("firmware update process has been initiated");
+                                    } else if (currentStatus.get().equals("STARTED")) {
+                                        assertThat(newStatus).isEqualTo("DOWNLOADING");
+                                        currentStatus.set(newStatus);
+                                        LOG.info("device has started downloading firmware");
+                                        stateDownloadingReached.complete();
+                                    } else if (currentStatus.get().equals("DOWNLOADING")) {
+                                        assertThat(newStatus).isEqualTo("DOWNLOADED");
+                                        currentStatus.set(newStatus);
+                                        LOG.info("device has successfully downloaded firmware, now sending install command");
+                                        final JsonObject cmd = newFirmwareCommand(
+                                                "install",
+                                                new JsonObject()
+                                                    .put("correlationId", "firmware-update")
+                                                    .put("softwareModules", newSoftwareModules(uri)));
+                                        helper.applicationClient.sendOneWayCommand(
+                                                tenantId,
+                                                deviceId,
+                                                "install firmware",
+                                                "application/vnd.eclipse.ditto+json",
+                                                cmd.toBuffer(),
+                                                null,
+                                                null);
+                                    } else if (currentStatus.get().equals("DOWNLOADED")) {
+                                        assertThat(newStatus).isEqualTo("INSTALLING");
+                                        currentStatus.set(newStatus);
+                                        LOG.info("device has started to install firmware");
+                                        stateInstallingReached.complete();
+                                    } else if (currentStatus.get().equals("INSTALLING")) {
+                                        assertThat(newStatus).isEqualTo("FINISHED_SUCCESS");
+                                        currentStatus.set(newStatus);
+                                        LOG.info("device has successfully installed new firmware");
+                                        stateFinishedReached.flag();
+                                    } else {
+                                        LOG.info("failed to transition state");
+                                    }
+                                    LOG.info("current status: {}", currentStatus.get());
+                                }
+                            });
+                        }
+//                        if (origAddress != null) {
+//                            final LwM2mPath path = new LwM2mPath(origAddress);
+//                            if (path.isObjectInstance() && path.getObjectId() == 5
+//                                    && msg.getContentType().equals(ContentFormat.TLV.getMediaType())) {
+//                                ctx.verify(() -> {
+//                                    final LwM2mObjectInstance obj = nodeDecoder.decode(
+//                                            msg.getPayload().getBytes(),
+//                                            ContentFormat.fromMediaType(msg.getContentType()),
+//                                            path,
+//                                            model,
+//                                            LwM2mObjectInstance.class);
+//                                    if (firmware.compareAndSet(null, obj)) {
+//                                        // first notification
+//                                        assertThat(obj.getResource(3).getValue())
+//                                            .as("\"state\" is \"idle\"")
+//                                            .isEqualTo(0L);
+//                                    } else {
+//                                        // second notification
+//                                        assertThat(obj.getResource(3).getValue())
+//                                            .as("\"state\" is \"downloading\"")
+//                                            .isEqualTo(1L);
+//                                        LOG.info("device has started downloading firmware");
+//                                    }
+//                                });
+//                                stateDownloadingReached.flag();
+//                            }
+//                        }
+                    },
+                    remoteClose -> {}))
+            .compose(eventConsumer -> helper.applicationClient.createTelemetryConsumer(
+                    tenantId,
+                    msg -> {
+                        final String origAddress = msg.getProperties().getProperty(MessageHelper.APP_PROPERTY_ORIG_ADDRESS, String.class);
+                        logger.info("received telemetry message [content-type: {}, orig_address: {}]", msg.getContentType(), origAddress);
+                    },
+                    remoteClose -> {}))
+            .compose(telemetryConsumer -> {
+                final Promise<LeshanClient> result = Promise.promise();
+                try {
+                    final var leshanClient = createLeshanClient(endpoint, BindingMode.U, lifetime, communicationPeriod);
+                    result.complete(leshanClient);
+                } catch (final CertificateEncodingException e) {
+                    result.fail(e);
+                }
+                return result.future();
+            })
+            .compose(leshanClient -> {
+                client = leshanClient;
+                final Promise<Void> registered = Promise.promise();
+                client.addObserver(new LeshanClientObserver() {
+                    @Override
+                    public void onRegistrationSuccess(
+                            final ServerIdentity server,
+                            final RegisterRequest request,
+                            final String registrationID) {
+                        registered.complete();
+                    }
+                });
+                client.start();
+                return registered.future();
+            })
+            // WHEN an application sends a command to set the device's Firmware package URI
+            .compose(registered -> {
+                firmwareObject.setPackageUriHandler(s -> {
+                    packageUriSet.complete(uri);
+                });
+                firmwareObject.setUpdateHandler(start -> {
+                    updateTriggered.complete();
+                });
+                final JsonObject cmd = newFirmwareCommand(
+                        "download",
+                        new JsonObject()
+                            .put("correlationId", "firmware-update")
+                            .put("softwareModules", newSoftwareModules(uri)));
+                return CompositeFuture.all(
+                        packageUriSet.future(),
+                        helper.applicationClient.sendOneWayCommand(
+                            tenantId,
+                            deviceId,
+                            "download firmware",
+                            "application/vnd.eclipse.ditto+json",
+                            cmd.toBuffer(),
+                            null,
+                            null));
+            })
+            .compose(ok -> {
+                // set state to "downloading"
+                firmwareObject.setState(1);
+                // and trigger notification
+                firmwareObject.fireResourcesChange(3);
+                return stateDownloadingReached.future();
+            })
+            .compose(ok -> {
+                // set state to "downloaded"
+                firmwareObject.setState(2);
+                // and trigger notification
+                firmwareObject.fireResourcesChange(3);
+                return updateTriggered.future();
+            }).compose(ok -> {
+                // set state to "updating"
+                firmwareObject.setState(3);
+                // and trigger notification
+                firmwareObject.fireResourcesChange(3);
+                return stateInstallingReached.future();
+            }).onSuccess(ok -> {
+                // set state to "idle"
+                firmwareObject.setState(0);
+                // set result to"succeeded"
+                firmwareObject.setUpdateResult(1);
+                // and trigger notification
+                firmwareObject.fireResourcesChange(3, 5);
+            });
+    }
+
+    private JsonObject newFirmwareCommand(
+            final String command,
+            final JsonObject value) {
+
+        final JsonObject commandPayload = new JsonObject()
+                .put("topic",  String.format("test/%s:%s/things/twins/events/modified", tenantId, deviceId))
+                .put("headers", new JsonObject())
+                .put("path", "features/softwareUpdateable/properties/" + command)
+                .put("value", value);
+        return commandPayload;
+    }
+
+    private JsonArray newSoftwareModules(final String uri) {
+        return new JsonArray().add(new JsonObject()
+                .put("softwareModule", new JsonObject()
+                        .put("name", "bumlux-fw")
+                        .put("version", "v1.5.3"))
+                .put("artifacts", new JsonArray().add(new JsonObject()
+                        .put("download", new JsonObject()
+                                .put("HTTPS", new JsonObject().put("url", uri))))));
     }
 
     private LeshanClient createLeshanClient(
@@ -278,7 +451,6 @@ public class LwM2mIT extends CoapTestBase {
                 null,
                 null,
                 null,
-                false, // do not support deprecated content encoding
                 false, // do not support deprecated ciphers
                 false, // do not perform new DTLS handshake before updating registration
                 false, // try to resume DTLS session
@@ -299,17 +471,13 @@ public class LwM2mIT extends CoapTestBase {
             final PublicKey serverPublicKey,
             final X509Certificate clientCertificate,
             final X509Certificate serverCertificate,
-            final boolean supportOldFormat,
             final boolean supportDeprecatedCiphers,
             final boolean reconnectOnUpdate,
             final boolean forceFullhandshake,
             final List<CipherSuite> ciphers) throws CertificateEncodingException {
 
-        // Initialize model
-        final List<ObjectModel> models = ObjectLoader.loadDefault();
 
         // Initialize object list
-        final LwM2mModel model = new StaticModel(models);
         final ObjectsInitializer initializer = new ObjectsInitializer(model);
         if (pskIdentity != null) {
             initializer.setInstancesForObject(LwM2mId.SECURITY, Security.psk(serverURI, 123, pskIdentity, pskKey));
@@ -430,10 +598,8 @@ public class LwM2mIT extends CoapTestBase {
         builder.setDtlsConfig(dtlsConfig);
         builder.setRegistrationEngineFactory(engineFactory);
         builder.setEndpointFactory(endpointFactory);
-        if (supportOldFormat) {
-            builder.setDecoder(new DefaultLwM2mNodeDecoder(true));
-            builder.setEncoder(new DefaultLwM2mNodeEncoder(true));
-        }
+        builder.setDecoder(nodeDecoder);
+        builder.setEncoder(nodeEncoder);
         builder.setAdditionalAttributes(additionalAttributes);
         final LeshanClient client = builder.build();
         client.getObjectTree().addListener(new ObjectsListenerAdapter() {

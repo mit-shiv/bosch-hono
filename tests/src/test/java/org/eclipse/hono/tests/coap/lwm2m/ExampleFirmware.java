@@ -14,6 +14,7 @@ package org.eclipse.hono.tests.coap.lwm2m;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.eclipse.leshan.client.resource.BaseInstanceEnabler;
 import org.eclipse.leshan.client.servers.ServerIdentity;
@@ -26,6 +27,8 @@ import org.eclipse.leshan.core.response.ReadResponse;
 import org.eclipse.leshan.core.response.WriteResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import io.vertx.core.Handler;
 
 /**
  * An example implementation of the standard LwM2M Firmware object.
@@ -41,6 +44,8 @@ public class ExampleFirmware extends BaseInstanceEnabler {
     private String packageUri = "";
     private int state = 0;
     private int updateResult = 0;
+    private Handler<String> packageUriHandler;
+    private Handler<Void> updateHandler;
 
     /**
      * Creates a new Firmware object.
@@ -85,6 +90,7 @@ public class ExampleFirmware extends BaseInstanceEnabler {
         switch (resourceid) {
         case 2: // update
             LOG.info("starting firmware update");
+            Optional.ofNullable(updateHandler).ifPresent(handler -> handler.handle(null));
             break;
         default:
             return super.execute(identity, resourceid, params);
@@ -105,8 +111,18 @@ public class ExampleFirmware extends BaseInstanceEnabler {
         }
     }
 
+    void setUpdateHandler(final Handler<Void> handler) {
+        this.updateHandler = handler;
+    }
+
+    void setPackageUriHandler(final Handler<String> handler) {
+        this.packageUriHandler = handler;
+    }
+
     private void setPackageUri(final String packageUri) {
+        LOG.info("setting package URI: {}", packageUri);
         this.packageUri = packageUri;
+        Optional.ofNullable(this.packageUriHandler).ifPresent(handler -> handler.handle(packageUri));
     }
 
     private String getPackageUri() {
@@ -114,6 +130,7 @@ public class ExampleFirmware extends BaseInstanceEnabler {
     }
 
     void setState(final int newState) {
+        LOG.info("setting State: {}", newState);
         this.state = newState;
     }
 
@@ -122,6 +139,7 @@ public class ExampleFirmware extends BaseInstanceEnabler {
     }
 
     void setUpdateResult(final int result) {
+        LOG.info("setting Update Result: {}", result);
         this.updateResult = result;
     }
 

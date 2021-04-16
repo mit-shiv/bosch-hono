@@ -14,29 +14,47 @@
 
 package org.eclipse.hono.adapter.coap.lwm2m;
 
+import java.net.HttpURLConnection;
 import java.util.Collection;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
+import org.eclipse.californium.core.coap.MediaTypeRegistry;
+import org.eclipse.californium.core.coap.MessageObserverAdapter;
 import org.eclipse.californium.core.coap.Request;
+import org.eclipse.californium.core.coap.Response;
+import org.eclipse.hono.adapter.client.command.Command;
 import org.eclipse.hono.adapter.client.command.CommandConsumer;
+import org.eclipse.hono.adapter.client.command.CommandContext;
+import org.eclipse.hono.adapter.client.command.CommandResponse;
+import org.eclipse.hono.adapter.client.command.Commands;
+import org.eclipse.hono.adapter.coap.CoapConstants;
 import org.eclipse.hono.adapter.coap.CoapProtocolAdapter;
 import org.eclipse.hono.auth.Device;
 import org.eclipse.hono.client.ClientErrorException;
+import org.eclipse.hono.client.StatusCodeMapper;
+import org.eclipse.hono.service.metric.MetricsTags.Direction;
 import org.eclipse.hono.service.metric.MetricsTags.EndpointType;
 import org.eclipse.hono.service.metric.MetricsTags.ProcessingOutcome;
 import org.eclipse.hono.service.metric.MetricsTags.QoS;
 import org.eclipse.hono.service.metric.MetricsTags.TtdStatus;
 import org.eclipse.hono.tracing.TracingHelper;
+import org.eclipse.hono.util.CommandConstants;
+import org.eclipse.hono.util.Constants;
 import org.eclipse.hono.util.Lifecycle;
 import org.eclipse.hono.util.MessageHelper;
 import org.eclipse.hono.util.RegistrationAssertion;
+import org.eclipse.hono.util.ResourceIdentifier;
+import org.eclipse.hono.util.TelemetryConstants;
 import org.eclipse.hono.util.TenantObject;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeDecoder;
 import org.eclipse.leshan.core.node.codec.DefaultLwM2mNodeEncoder;
+import org.eclipse.leshan.core.node.codec.LwM2mNodeDecoder;
 import org.eclipse.leshan.core.observation.Observation;
 import org.eclipse.leshan.core.request.BindingMode;
 import org.eclipse.leshan.core.request.ObserveRequest;
@@ -44,6 +62,7 @@ import org.eclipse.leshan.core.response.ObserveResponse;
 import org.eclipse.leshan.server.californium.observation.ObservationServiceImpl;
 import org.eclipse.leshan.server.californium.registration.CaliforniumRegistrationStore;
 import org.eclipse.leshan.server.californium.request.CaliforniumLwM2mRequestSender;
+import org.eclipse.leshan.server.model.LwM2mModelProvider;
 import org.eclipse.leshan.server.model.StandardModelProvider;
 import org.eclipse.leshan.server.observation.ObservationListener;
 import org.eclipse.leshan.server.observation.ObservationService;
@@ -54,6 +73,7 @@ import org.eclipse.leshan.server.request.LwM2mRequestSender2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import io.micrometer.core.instrument.Timer.Sample;
 import io.opentracing.References;
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
@@ -62,6 +82,8 @@ import io.opentracing.log.Fields;
 import io.opentracing.tag.Tags;
 import io.vertx.core.CompositeFuture;
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
+import io.vertx.core.buffer.Buffer;
 
 
 /**
@@ -71,16 +93,18 @@ import io.vertx.core.Future;
 public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore, Lifecycle, ExpirationListener {
 
     private static final Logger LOG = LoggerFactory.getLogger(LeshanBasedLwM2MRegistrationStore.class);
-    private static final String KEY_ENDPOINT_TYPE = "ep_type";
 
     private final Map<String, CommandConsumer> commandConsumers = new ConcurrentHashMap<>();
     private final CoapProtocolAdapter adapter;
     private final Tracer tracer;
     private final CaliforniumRegistrationStore registrationStore;
+    private final LwM2mNodeDecoder nodeDecoder = new DefaultLwM2mNodeDecoder();
+    private final LwM2mModelProvider modelProvider = new StandardModelProvider();
 
     private LwM2mRequestSender2 lwm2mRequestSender;
     private ObservationService observationService;
     private Map<String, EndpointType> resourcesToObserve = new ConcurrentHashMap<>();
+    private LwM2MMessageMapping messageMapping = new DittoProtocolMessageMapping();
 
     /**
      * Creates a new store.
@@ -98,16 +122,25 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
         this.registrationStore = Objects.requireNonNull(registrationStore);
         this.adapter = Objects.requireNonNull(adapter);
         this.tracer = Objects.requireNonNull(tracer);
-        // observe Device and Firmware objects by default
+        // observe Device by default
         resourcesToObserve.put("/3/0", EndpointType.TELEMETRY);
-        resourcesToObserve.put("/5/0", EndpointType.EVENT);
+    }
+
+    /**
+     * Sets the component to use for mapping upstream/downstream messages.
+     * <p>
+     * If not set, no mapping will be applied.
+     *
+     * @param mapping The mapping component.
+     * @throws NullPointerException if mapping is {@code null}.
+     */
+    public void setMessageMapping(final LwM2MMessageMapping mapping) {
+        this.messageMapping = Objects.requireNonNull(mapping);
     }
 
     @Override
     public Future<Void> start() {
         registrationStore.setExpirationListener(this);
-        final var modelProvider = new StandardModelProvider();
-        final var nodeDecoder = new DefaultLwM2mNodeDecoder();
 
         final var observationServiceImpl = new ObservationServiceImpl(
                 registrationStore,
@@ -131,7 +164,7 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
                     final ObserveResponse response) {
 
                 adapter.runOnContext(go -> {
-                    handleNotification(registration, response);
+                    onNotification(registration, response);
                 });
             }
 
@@ -206,7 +239,6 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
         return Future.succeededFuture(resourcesToObserve);
     }
 
-
     private void observeConfiguredResources(
             final Registration registration,
             final SpanContext tracingContext) {
@@ -230,7 +262,7 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
                             tenantId,
                             deviceId,
                             entry.getKey(),
-                            entry.getValue(),
+                            Map.of(LwM2MUtils.KEY_NOTIFICATION_ENDPOINT, entry.getValue().getCanonicalName()),
                             tracingContext));
             })
             .onComplete(r -> span.finish());
@@ -241,12 +273,12 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
                 .anyMatch(link -> resource.startsWith(link.getUrl()));
     }
 
-    private void observeResource(
+    private Future<Void> observeResource(
             final Registration registration,
             final String tenantId,
             final String deviceId,
             final String resource,
-            final EndpointType endpoint,
+            final Map<String, String> additionalProperties,
             final SpanContext tracingContext) {
 
         final var span = tracer.buildSpan("observe resource")
@@ -261,12 +293,35 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
         if (!isResourceSupported(registration, resource)) {
             TracingHelper.logError(span, "device does not support resource");
             span.finish();
-            return;
+            return Future.failedFuture(new ClientErrorException(HttpURLConnection.HTTP_NOT_FOUND));
         }
+
+        if (!additionalProperties.containsKey(LwM2MUtils.KEY_NOTIFICATION_ENDPOINT)) {
+            additionalProperties.put(LwM2MUtils.KEY_NOTIFICATION_ENDPOINT, EndpointType.TELEMETRY.getCanonicalName());
+        }
+
+        Optional.ofNullable(additionalProperties.get("status.correlationId"))
+            .ifPresent(cid -> {
+                observationService.getObservations(registration)
+                    .stream()
+                    .filter(obs -> obs.getPath().toString().equals(resource))
+                    .forEach(existingObservation -> {
+                        // check if the existing observation uses a different correlation ID
+                        Optional.ofNullable(existingObservation.getContext().get("status.correlationId"))
+                            .filter(id -> !id.equals(cid))
+                            .ifPresent(existingCorrelationId -> {
+                                // we need to replace the existing observation with a new one for the new correlation id
+                                LOG.debug("canceling existing {}", existingObservation);
+                                observationService.cancelObservation(existingObservation);
+                            });
+                    });
+            });
+
+        final Promise<Void> result = Promise.promise();
 
         lwm2mRequestSender.send(
                 registration,
-                new ObserveRequest(null, resource, Map.of(KEY_ENDPOINT_TYPE, endpoint.getCanonicalName())),
+                new ObserveRequest(null, resource, additionalProperties),
                 req -> {
                     ((Request) req).setConfirmable(true);
                 },
@@ -274,12 +329,15 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
                 response -> {
                     if (response.isFailure()) {
                         TracingHelper.logError(span, "failed to establish observation");
+                        result.fail(StatusCodeMapper.from(response.getCode().getCode(), response.getErrorMessage()));
                     } else {
+                        result.complete();
                         adapter.runOnContext(go -> {
-                            handleNotification(registration, response);
+                            onNotification(registration, response);
                         });
                     }
-                    span.setTag(Tags.HTTP_STATUS, response.getCode().getCode());
+                    final String responseCode = ((Response) response.getCoapResponse()).getCode().text;
+                    CoapConstants.TAG_COAP_RESPONSE_CODE.set(span, responseCode);
                     span.finish();
                 },
                 t -> {
@@ -287,8 +345,10 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
                             Fields.MESSAGE, "failed to send observe request",
                             Fields.ERROR_KIND, "Exception",
                             Fields.ERROR_OBJECT, t));
+                    result.fail(StatusCodeMapper.toServerError(t));
                     span.finish();
                 });
+        return result.future();
     }
 
     /**
@@ -298,7 +358,7 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
      * @param response The response message that contains the notification.
      * @throws NullPointerException if any of the parameters are {@code null}.
      */
-    void handleNotification(
+    void onNotification(
             final Registration registration,
             final ObserveResponse response) {
 
@@ -308,7 +368,7 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
         final var observation = response.getObservation();
         LOG.debug("handling notification for {}", observation);
         final Device authenticatedDevice = LwM2MUtils.getDevice(registration);
-        final EndpointType endpoint = Optional.ofNullable(observation.getContext().get(KEY_ENDPOINT_TYPE))
+        final EndpointType endpoint = Optional.ofNullable(observation.getContext().get(LwM2MUtils.KEY_NOTIFICATION_ENDPOINT))
                 .map(EndpointType::fromString)
                 .orElse(EndpointType.TELEMETRY);
 
@@ -322,34 +382,39 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
                 .start();
 
         final var ctx = NotificationContext.fromResponse(
+                registration,
                 response,
                 authenticatedDevice,
                 adapter.getMetrics().startTimer(),
                 currentSpan);
 
-        final Map<String, Object> props = ctx.getDownstreamMessageProperties();
-        props.put(MessageHelper.APP_PROPERTY_ORIG_ADAPTER, adapter.getTypeName());
-
-        final Future<TenantObject> tenantTracker = adapter.getTenantClient().get(ctx.getTenantId(), currentSpan.context())
-                .compose(tenantObject -> CompositeFuture.all(
-                        adapter.isAdapterEnabled(tenantObject),
-                        adapter.checkMessageLimit(tenantObject, ctx.getPayload().length(), currentSpan.context()))
-                    .map(tenantObject));
+        final Future<TenantObject> tenantTracker = getTenantConfiguration(ctx.getTenantId(), ctx.getPayloadSize(), currentSpan.context());
         final Future<RegistrationAssertion> tokenTracker = adapter.getRegistrationAssertion(
                 ctx.getTenantId(),
                 ctx.getAuthenticatedDevice().getDeviceId(),
                 null,
                 currentSpan.context());
+        final Future<MappedDownstreamMessage> mappedMessage = tokenTracker
+                .compose(registrationInfo -> messageMapping.mapDownstreamMessage(
+                        ctx,
+                        ResourceIdentifier.from(
+                                TelemetryConstants.TELEMETRY_ENDPOINT,
+                                ctx.getTenantId(),
+                                ctx.getAuthenticatedDevice().getDeviceId()),
+                        registrationInfo));
 
-        CompositeFuture.join(tenantTracker, tokenTracker)
+        CompositeFuture.all(tenantTracker, mappedMessage)
             .compose(ok -> {
+                final Map<String, Object> props = mappedMessage.result().getAdditionalProperties();
+                props.put(MessageHelper.APP_PROPERTY_ORIG_ADAPTER, adapter.getTypeName());
+
                 if (EndpointType.EVENT == endpoint) {
                     LOG.debug("forwarding observe response as event");
                     return adapter.getEventSender(tenantTracker.result()).sendEvent(
                             tenantTracker.result(),
                             tokenTracker.result(),
-                            ctx.getContentType(),
-                            ctx.getPayload(),
+                            mappedMessage.result().getContentType(),
+                            mappedMessage.result().getPayload(),
                             props,
                             currentSpan.context());
                 } else {
@@ -358,8 +423,8 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
                             tenantTracker.result(),
                             tokenTracker.result(),
                             ctx.getRequestedQos(),
-                            ctx.getContentType(),
-                            ctx.getPayload(),
+                            mappedMessage.result().getContentType(),
+                            mappedMessage.result().getPayload(),
                             props,
                             currentSpan.context());
                 }
@@ -369,8 +434,7 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
                 if (r.succeeded()) {
                     outcome = ProcessingOutcome.FORWARDED;
                 } else {
-                    outcome = ClientErrorException.class.isInstance(r.cause()) ?
-                            ProcessingOutcome.UNPROCESSABLE : ProcessingOutcome.UNDELIVERABLE;
+                    outcome = ProcessingOutcome.from(r.cause());
                     TracingHelper.logError(currentSpan, r.cause());
                 }
                 adapter.getMetrics().reportTelemetry(
@@ -379,11 +443,237 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
                         tenantTracker.result(),
                         outcome,
                         EndpointType.EVENT == endpoint ? QoS.AT_LEAST_ONCE : QoS.AT_MOST_ONCE,
-                        ctx.getPayload().length(),
+                        ctx.getPayloadSize(),
                         TtdStatus.NONE,
                         ctx.getTimer());
                 currentSpan.finish();
             });
+    }
+
+    void onCommand(
+            final Registration registration,
+            final CommandContext commandContext) {
+
+        final Sample timer = adapter.getMetrics().startTimer();
+        final Span requestSpan = TracingHelper.buildChildSpan(
+                tracer,
+                commandContext.getTracingContext(),
+                "send command request",
+                adapter.getTypeName())
+                .withTag(Tags.SPAN_KIND, Tags.SPAN_KIND_CLIENT)
+                .start();
+
+        final Command command = commandContext.getCommand();
+
+        final Future<TenantObject> tenantTracker = getTenantConfiguration(
+                command.getTenant(),
+                command.getPayloadSize(),
+                requestSpan.context());
+
+        final Future<MappedUpstreamMessage> mappedMessageTracker = adapter.getRegistrationAssertion(
+                command.getTenant(),
+                command.getDeviceId(),
+                null,
+                requestSpan.context())
+            .compose(registrationInfo -> messageMapping.mapUpstreamMessage(registrationInfo, commandContext, registration));
+
+        CompositeFuture.all(tenantTracker, mappedMessageTracker)
+            .compose(ok -> mappedMessageTracker)
+            .compose(mappedMessage -> {
+
+                @SuppressWarnings("rawtypes")
+                final List<Future> requiredObservationsEstablished = new LinkedList<>();
+                mappedMessage.getRequiredObservations().stream()
+                    .forEach(requiredObservation -> {
+                            LOG.debug("command requires observation of {}", requiredObservation.getPath());
+                            requiredObservationsEstablished.add(observeResource(
+                                    registration,
+                                    command.getTenant(),
+                                    command.getDeviceId(),
+                                    requiredObservation.getPath().toString(),
+                                    requiredObservation.getObservationProperties(),
+                                    requestSpan.context()));
+                    });
+                return CompositeFuture.all(requiredObservationsEstablished).map(mappedMessage.getRequest());
+            })
+            .onSuccess(request -> {
+                LOG.debug("forwarding command to device in new Leshan request [type: {}, resource path: {}]",
+                        request.getClass().getSimpleName(), request.getPath().toString());
+                requestSpan.log(Map.of(
+                        Fields.MESSAGE, "forwarding command to device in new Leshan request",
+                        "type", request.getClass().getSimpleName()));
+                LwM2MUtils.TAG_LWM2M_RESOURCE.set(requestSpan, request.getPath().toString());
+
+                lwm2mRequestSender.send(
+                        registration,
+                        request,
+                        req -> {
+                            ((Request) req).setConfirmable(true);
+                            ((Request) req).addMessageObserver(new MessageObserverAdapter() {
+                                /**
+                                 * {@inheritDoc}
+                                 * <p>
+                                 * Marks the command as having been successfully sent to the device.
+                                 */
+                                @Override
+                                public void onAcknowledgement() {
+                                    adapter.runOnContext(go -> {
+                                        commandContext.accept();
+                                        adapter.getMetrics().reportCommand(
+                                                command.isOneWay() ? Direction.ONE_WAY : Direction.REQUEST,
+                                                command.getTenant(),
+                                                tenantTracker.result(),
+                                                ProcessingOutcome.FORWARDED,
+                                                command.getPayloadSize(),
+                                                timer);
+                                    });
+                                }
+                            });
+                        },
+                        30_000L, // we require the device to answer quickly
+                        response -> {
+                            adapter.runOnContext(go -> {
+                                final var coapResponse = (Response) response.getCoapResponse();
+                                CoapConstants.TAG_COAP_RESPONSE_CODE.set(requestSpan, coapResponse.getCode().toString());
+                                requestSpan.finish();
+                                if (command.isOneWay()) {
+                                    // nothing more to do
+                                } else {
+                                    onCommandResponse(registration, command, coapResponse, requestSpan.context());
+                                }
+                            });
+                        },
+                        t -> {
+                            handleRequestSendingFailure(t, requestSpan, commandContext, command, tenantTracker.result(), timer);
+                        });
+            })
+            .onFailure(t -> {
+                handleRequestSendingFailure(t, requestSpan, commandContext, command, tenantTracker.result(), timer);
+            });
+
+    }
+
+    private void handleRequestSendingFailure(
+            final Throwable error,
+            final Span requestSpan,
+            final CommandContext commandContext,
+            final Command command,
+            final TenantObject tenant,
+            final Sample timer) {
+
+        LOG.debug("failed to send command request", error);
+        TracingHelper.logError(requestSpan, Map.of(
+                Fields.MESSAGE, "failed to send command request",
+                Fields.ERROR_KIND, "Exception",
+                Fields.ERROR_OBJECT, error));
+        requestSpan.finish();
+        commandContext.release();
+        adapter.getMetrics().reportCommand(
+                command.isOneWay() ? Direction.ONE_WAY : Direction.REQUEST,
+                command.getTenant(),
+                tenant,
+                ProcessingOutcome.from(error),
+                command.getPayloadSize(),
+                timer);
+    }
+
+    void onCommandResponse(
+            final Registration registration,
+            final Command command,
+            final Response response,
+            final SpanContext requestContext) {
+
+        final Sample timer = adapter.getMetrics().startTimer();
+        final Device device = LwM2MUtils.getDevice(registration);
+        final String correlationId = command.getCorrelationId();
+        final Integer status = response.getCode().codeClass * 100 + response.getCode().codeDetail;
+
+        final Span currentSpan = tracer.buildSpan("upload Command response")
+                .addReference(References.FOLLOWS_FROM, requestContext)
+                .withTag(Tags.COMPONENT, adapter.getTypeName())
+                .withTag(Tags.SPAN_KIND.getKey(), Tags.SPAN_KIND_CLIENT)
+                .withTag(TracingHelper.TAG_TENANT_ID, device.getTenantId())
+                .withTag(TracingHelper.TAG_DEVICE_ID, device.getDeviceId())
+                .withTag(Constants.HEADER_COMMAND_RESPONSE_STATUS, status)
+                .withTag(TracingHelper.TAG_CORRELATION_ID, correlationId)
+                .start();
+
+        LOG.debug("processing response to command [tenant-id: {}, device-id: {}, correlation-id: {}, status code: {}]",
+                device.getTenantId(), device.getDeviceId(), correlationId, status);
+
+        final String replyToAddress = String.format("%s/%s/%s",
+                CommandConstants.COMMAND_RESPONSE_ENDPOINT,
+                device.getTenantId(),
+                Commands.getDeviceFacingReplyToId(command.getReplyToId(), device.getDeviceId()));
+
+        // TODO invoke downstream message mapper for command response
+
+        final Buffer payload = Optional.ofNullable(response.getPayload())
+                .map(Buffer::buffer)
+                .orElse(Buffer.buffer());
+        final CommandResponse commandResponse = CommandResponse.fromCorrelationId(
+                correlationId,
+                replyToAddress,
+                payload,
+                MediaTypeRegistry.toString(response.getOptions().getContentFormat()),
+                status);
+
+        final Future<TenantObject> tenantTracker = getTenantConfiguration(
+                device.getTenantId(),
+                response.getPayloadSize(),
+                currentSpan.context());
+
+        tenantTracker
+            .compose(tenant -> adapter.getCommandResponseSender(tenant)
+                    .sendCommandResponse(commandResponse, currentSpan.context()))
+            .onSuccess(ok -> {
+                LOG.trace("forwarded command response [correlation-id: {}] to downstream application",
+                        correlationId);
+                currentSpan.log("forwarded command response to application");
+                adapter.getMetrics().reportCommand(
+                        Direction.RESPONSE,
+                        device.getTenantId(),
+                        tenantTracker.result(),
+                        ProcessingOutcome.FORWARDED,
+                        payload.length(),
+                        timer);
+            })
+            .onFailure(t -> {
+                LOG.debug("could not send command response [correlation-id: {}] to application",
+                        correlationId, t);
+                TracingHelper.logError(currentSpan, t);
+                adapter.getMetrics().reportCommand(
+                        Direction.RESPONSE,
+                        device.getTenantId(),
+                        tenantTracker.result(),
+                        ProcessingOutcome.from(t),
+                        payload.length(),
+                        timer);
+            })
+            .onComplete(r -> currentSpan.finish());
+    }
+
+    private Future<TenantObject> getTenantConfiguration(
+            final String tenantId,
+            final SpanContext tracingContext) {
+
+        return adapter.getTenantClient().get(tenantId, tracingContext)
+                .compose(adapter::isAdapterEnabled);
+    }
+
+    private Future<TenantObject> getTenantConfiguration(
+            final String tenantId,
+            final long payloadSize,
+            final SpanContext tracingContext) {
+
+        return getTenantConfiguration(tenantId, tracingContext)
+                .compose(tenant -> {
+                    // we only need to check message limit here because
+                    // 1. the connection to the client is already established and
+                    // 2. even if the tenant has been disabled between sending out the request and
+                    // receiving the response, we should still be able to safely process the (pending) response.
+                    return adapter.checkMessageLimit(tenant, payloadSize, tracingContext).map(tenant);
+                });
     }
 
     @Override
@@ -417,15 +707,14 @@ public class LeshanBasedLwM2MRegistrationStore implements LwM2MRegistrationStore
         }
 
         return adapter.getCommandConsumerFactory()
-            .createCommandConsumer(
-                device.getTenantId(),
-                device.getDeviceId(),
-                commandContext -> {
-                    Tags.COMPONENT.set(commandContext.getTracingSpan(), adapter.getTypeName());
-                 // TODO add logic for sending commands to device
-                },
-                null,
-                tracingContext)
+                .createCommandConsumer(
+                        device.getTenantId(),
+                        device.getDeviceId(),
+                        commandContext -> {
+                            onCommand(registration, commandContext);
+                        },
+                        null,
+                        tracingContext)
             .compose(commandConsumer -> {
                 commandConsumers.put(registration.getId(), commandConsumer);
                 return sendLifetimeAsTtdEvent(device, registration, tracingContext);

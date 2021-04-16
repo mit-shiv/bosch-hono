@@ -94,7 +94,7 @@ quarkus:
       "org.eclipse.hono.adapter.coap":
         level: INFO
       "org.eclipse.hono.adapter.coap.lwm2m":
-        level: DEBUG
+        level: INFO
   vertx:
     max-event-loop-execute-time: ${max.event-loop.execute-time}
     prefer-native-transport: true
