@@ -51,12 +51,14 @@ import org.eclipse.californium.core.coap.MediaTypeRegistry;
 import org.eclipse.californium.core.coap.OptionSet;
 import org.eclipse.californium.core.coap.Request;
 import org.eclipse.californium.core.network.CoapEndpoint;
-import org.eclipse.californium.core.network.config.NetworkConfig;
+import org.eclipse.californium.elements.config.Configuration;
 import org.eclipse.californium.scandium.DTLSConnector;
+import org.eclipse.californium.scandium.config.DtlsConfig;
 import org.eclipse.californium.scandium.config.DtlsConnectorConfig;
 import org.eclipse.californium.scandium.dtls.CertificateType;
 import org.eclipse.californium.scandium.dtls.pskstore.AdvancedPskStore;
 import org.eclipse.californium.scandium.dtls.pskstore.AdvancedSinglePskStore;
+import org.eclipse.californium.scandium.dtls.x509.SingleCertificateProvider;
 import org.eclipse.californium.scandium.dtls.x509.StaticNewAdvancedCertificateVerifier;
 import org.eclipse.hono.application.client.DownstreamMessage;
 import org.eclipse.hono.application.client.MessageConsumer;
@@ -219,9 +221,9 @@ public abstract class CoapTestBase {
      * @return The client.
      */
     protected CoapClient getCoapsClient(final KeyLoader keyLoader) {
-
-        final DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
-        dtlsConfig.setIdentity(keyLoader.getPrivateKey(), keyLoader.getCertificateChain(), CertificateType.X_509);
+        final Configuration configuration = new Configuration();
+        final DtlsConnectorConfig.Builder dtlsConfig = DtlsConnectorConfig.builder(configuration);
+        dtlsConfig.setCertificateIdentityProvider(new SingleCertificateProvider(keyLoader.getPrivateKey(), keyLoader.getCertificateChain(), CertificateType.X_509));
         dtlsConfig.setAdvancedCertificateVerifier(StaticNewAdvancedCertificateVerifier.builder().setTrustAllCertificates().build());
         return getCoapsClient(dtlsConfig);
     }
@@ -249,8 +251,8 @@ public abstract class CoapTestBase {
      * @return The client.
      */
     protected CoapClient getCoapsClient(final AdvancedPskStore pskStoreToUse) {
-
-        final DtlsConnectorConfig.Builder dtlsConfig = new DtlsConnectorConfig.Builder();
+        final Configuration configuration = new Configuration();
+        final DtlsConnectorConfig.Builder dtlsConfig = DtlsConnectorConfig.builder(configuration);
         dtlsConfig.setAdvancedPskStore(pskStoreToUse);
         return getCoapsClient(dtlsConfig);
     }
@@ -267,10 +269,11 @@ public abstract class CoapTestBase {
 
         // listen on wildcard to support non-localhost docker daemons
         dtlsConnectorConfig.setAddress(new InetSocketAddress(0));
-        dtlsConnectorConfig.setMaxRetransmissions(1);
-        final CoapEndpoint.Builder builder = new CoapEndpoint.Builder();
-        builder.setNetworkConfig(NetworkConfig.createStandardWithoutFile());
-        builder.setConnector(new DTLSConnector(dtlsConnectorConfig.build()));
+        dtlsConnectorConfig.set(DtlsConfig.DTLS_MAX_RETRANSMISSIONS, 1);
+        final DtlsConnectorConfig dtlsConfig = dtlsConnectorConfig.build();
+        final CoapEndpoint.Builder builder = CoapEndpoint.builder();
+        builder.setConfiguration(dtlsConfig.getConfiguration());
+        builder.setConnector(new DTLSConnector(dtlsConfig));
         return new CoapClient().setEndpoint(builder.build());
     }
 

@@ -29,15 +29,15 @@ public class CoapAdapterProperties extends ProtocolAdapterProperties {
     /**
      * The default number of threads for the connector.
      */
-    public static final int DEFAULT_CONNECTOR_THREADS = 2;
+    public static final int DEFAULT_CONNECTOR_THREADS;
     /**
      * The default number of threads for the coap protocol stack.
      */
-    public static final int DEFAULT_COAP_THREADS = 2;
+    public static final int DEFAULT_COAP_THREADS;
     /**
      * The default number of threads for the dtls connector.
      */
-    public static final int DEFAULT_DTLS_THREADS = 32;
+    public static final int DEFAULT_DTLS_THREADS;
     /**
      * The default timeout in milliseconds for DTLS retransmissions.
      */
@@ -66,6 +66,18 @@ public class CoapAdapterProperties extends ProtocolAdapterProperties {
      * that time, the status gets removed and a new request will fail.
      */
     public static final int DEFAULT_BLOCKWISE_STATUS_LIFETIME = 300000;
+
+    static {
+        DEFAULT_CONNECTOR_THREADS = 2;
+        final int cpu = Runtime.getRuntime().availableProcessors();
+        if (cpu < 4) {
+            DEFAULT_COAP_THREADS = 4;
+            DEFAULT_DTLS_THREADS = 4;
+        } else {
+            DEFAULT_COAP_THREADS = cpu;
+            DEFAULT_DTLS_THREADS = cpu;
+        }
+    }
 
     private String idSplitRegex = DEFAULT_ID_SPLIT_REGEX;
     private String networkConfig = null;

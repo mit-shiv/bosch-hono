@@ -60,4 +60,6 @@
   <logger name="io.vertx.proton.impl" level="INFO"/>
   <logger name="io.vertx.core.net.impl" level="INFO"/>
 
+  <logger name="org.eclipse.californium" level="WARN"/>
+
 </configuration>
