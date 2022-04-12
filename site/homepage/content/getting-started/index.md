@@ -46,7 +46,7 @@ Note that running the command line client requires a Java 11 runtime environment
 
 In the following all necessary commands and operations will be explained on how to register a tenant and a device via
 the HTTP API. Then, it will be shown how messages can be sent via the HTTP and MQTT protocol adapters.
-If you want to really kickstart your Hono experience there also is a convenience Python script which you can use to 
+If you want to really kick start your Hono experience there also is a convenience Python script which you can use to 
 automatically replay the Tutorial given here (at least the telemetry part for now).
 
 {{% note title="Python Quickstart" %}}
@@ -56,7 +56,7 @@ The python script does
 * Set up a Tenant
 * Set up a Device in the tenant
 * Add credentials to the device
-* Start an (northbound) AMQP Receiver as "Consumer" of the data
+* Start a north bound AMQP based consumer of the data
 * Send a Telemetry message via HTTP API
 * Send a Telemetry message via MQTT API
 For more details have a look in the [Readme](https://github.com/eclipse/hono/tree/master/examples/quickstart-python/README.md).
@@ -127,7 +127,7 @@ export MQTT_ADAPTER_IP=$(kubectl get service eclipse-hono-adapter-mqtt-vertx --o
 Verify the last step with
 
 ~~~sh
-echo $REGISTRY_IP
+echo ${REGISTRY_IP}
 ~~~
 
 If this does not print an IP address, check that `minikube tunnel` is running.
@@ -176,7 +176,7 @@ Registry.
 Register a tenant using Hono's Device Registry's management HTTP API (a random tenant identifier will be generated):
 
 ~~~sh
-curl -i -X POST http://$REGISTRY_IP:28080/v1/tenants
+curl -i -X POST http://${REGISTRY_IP}:28080/v1/tenants
 
 HTTP/1.1 201 Created
 etag: becc93d7-ab0f-48ec-ad26-debdf339cbf4
@@ -201,7 +201,7 @@ export MY_TENANT=85f63e23-1b78-4156-8500-debcbd1a8d35
 Register a device using Hono's Device Registry's management HTTP API (a random device identifier will be assigned):
 
 ~~~sh
-curl -i -X POST http://$REGISTRY_IP:28080/v1/devices/$MY_TENANT
+curl -i -X POST http://${REGISTRY_IP}:28080/v1/devices/${MY_TENANT}
 
 HTTP/1.1 201 Created
 etag: 68eab243-3df9-457d-a0ab-b702e57c0c17
@@ -230,11 +230,11 @@ password):
 export MY_PWD=my-pwd
 curl -i -X PUT -H "content-type: application/json" --data-binary '[{
   "type": "hashed-password",
-  "auth-id": "'$MY_DEVICE'",
+  "auth-id": "'${MY_DEVICE}'",
   "secrets": [{
-      "pwd-plain": "'$MY_PWD'"
+      "pwd-plain": "'${MY_PWD}'"
   }]
-}]' http://$REGISTRY_IP:28080/v1/credentials/$MY_TENANT/$MY_DEVICE
+}]' http://${REGISTRY_IP}:28080/v1/credentials/${MY_TENANT}/${MY_DEVICE}
 
 HTTP/1.1 204 Updated
 etag: cf91fd4d-7111-4e8a-af68-c703993a8be1
@@ -269,7 +269,7 @@ identifier):
 ~~~sh
 # in directory where the hono-cli-*-exec.jar file has been downloaded to
 export MY_TENANT=my-tenant
-java -jar hono-cli-*-exec.jar --hono.client.host=$AMQP_NETWORK_IP --hono.client.port=15672 --hono.client.username=consumer@HONO --hono.client.password=verysecret --spring.profiles.active=receiver --tenant.id=$MY_TENANT
+java -jar hono-cli-*-exec.jar app -H ${AMQP_NETWORK_IP} -P 15672 -u consumer@HONO -p verysecret --amqp consume --tenant ${MY_TENANT}
 ~~~
 
 ## Publishing Telemetry Data to the HTTP Adapter
@@ -279,18 +279,17 @@ protocol adapters. First, you will simulate a device publishing data to Hono usi
 Go back to the original terminal and run:
 
 ~~~sh
-curl -i -u $MY_DEVICE@$MY_TENANT:$MY_PWD -H 'Content-Type: application/json' --data-binary '{"temp": 5}' http://$HTTP_ADAPTER_IP:8080/telemetry
+curl -i -u ${MY_DEVICE}@${MY_TENANT}:${MY_PWD} -H 'Content-Type: application/json' --data-binary '{"temp": 5}' http://${HTTP_ADAPTER_IP}:8080/telemetry
 
 HTTP/1.1 202 Accepted
 Content-Length: 0
 ~~~
 
-If you have started the downstream application as described above, you should now see the telemetry message being logged
+If you have started the downstream application as described above, you should now see the telemetry message being output
 to the application's console in the other terminal. The output should look something like this:
 
 ~~~sh
-13:36:49.169 [vert.x-eventloop-thread-0] INFO  org.eclipse.hono.cli.Receiver - received telemetry message [device: my-device, content-type: application/json]: {"temp": 5}
-13:36:49.170 [vert.x-eventloop-thread-0] INFO  org.eclipse.hono.cli.Receiver - ... with application properties: {orig_adapter=hono-http, device_id=my-device, orig_address=/telemetry, JMS_AMQP_CONTENT_TYPE=application/json}
+t 4412abe2-f219-4099-ae14-b446604ae9c6 application/json {"temp": 5} {orig_adapter=hono-http, device_id=my-device, orig_address=/telemetry}
 ~~~
 
 You can publish more data simply by re-running the `curl` command above with arbitrary payload.
@@ -327,7 +326,7 @@ on how that works and additional examples for interacting with Hono via HTTP, pl
 In a similar way you can upload events:
 
 ~~~sh
-curl -i -u $MY_DEVICE@$MY_TENANT:$MY_PWD -H 'Content-Type: application/json' --data-binary '{"alarm": "fire"}' http://$HTTP_ADAPTER_IP:8080/event
+curl -i -u ${MY_DEVICE}@${MY_TENANT}:${MY_PWD} -H 'Content-Type: application/json' --data-binary '{"alarm": "fire"}' http://${HTTP_ADAPTER_IP}:8080/event
 
 HTTP/1.1 202 Accepted
 Content-Length: 0
@@ -341,7 +340,7 @@ Devices can also publish data to Hono using the MQTT protocol. If you have insta
 client, you can run the following command to publish arbitrary telemetry data to Hono's MQTT adapter using QoS 0:
 
 ~~~sh
-mosquitto_pub -h $MQTT_ADAPTER_IP -u $MY_DEVICE@$MY_TENANT -P $MY_PWD -t telemetry -m '{"temp": 5}'
+mosquitto_pub -h ${MQTT_ADAPTER_IP} -u ${MY_DEVICE}@${MY_TENANT} -P ${MY_PWD} -t telemetry -m '{"temp": 5}'
 ~~~
 
 Again, you should now see the telemetry message being logged to console of the downstream application.
@@ -355,10 +354,10 @@ and additional examples for interacting with Hono via MQTT, please refer to the
 In a similar way you can upload events:
 
 ~~~sh
-mosquitto_pub -h $MQTT_ADAPTER_IP -u $MY_DEVICE@$MY_TENANT -P $MY_PWD -t event -q 1 -m '{"alarm": "fire"}'
+mosquitto_pub -h ${MQTT_ADAPTER_IP} -u ${MY_DEVICE}@${MY_TENANT} -P ${MY_PWD} -t event -q 1 -m '{"alarm": "fire"}'
 ~~~
 
-Again, you should now see the telemetry message being logged to console of the downstream application.
+Again, you should now see the message being logged to console of the downstream application.
 
 {{% note title="Congratulations" %}}
 You have successfully connected a device to Hono and published sensor data for consumption by an application connected
@@ -382,7 +381,7 @@ protocol used by the device to publish the data.
 
 The following example will guide you through an advanced feature of Hono. You will see how an application can send a
 command to a device and receive a response with the result of processing the command on the device. The communication
-direction here is exactly the other way round than with telemetry and events. 
+direction here is exactly the other way around as with telemetry and events. 
 
 The following assumes that the steps in the
 [Prerequisites for the Getting started Guide]({{< relref "#prerequisites-for-the-getting-started-guide" >}}) and
@@ -396,93 +395,85 @@ Create a subscription to the command topic in the terminal for the simulated dev
 variables `MQTT_ADAPTER_IP`, `MY_TENANT` and `MY_DEVICE`)
  
  ~~~sh
- mosquitto_sub -v -h $MQTT_ADAPTER_IP -u $MY_DEVICE@$MY_TENANT -P $MY_PWD -t command///req/#
+ mosquitto_sub -v -h ${MQTT_ADAPTER_IP} -u ${MY_DEVICE}@${MY_TENANT} -P ${MY_PWD} -t command///req/#
  ~~~
 
-Now that the device is waiting to receive commands, the application can start sending them.
-Start the Command Line Client in the terminal for the application side (don't forget to set the environment variables
-`AMQP_NETWORK_IP`, `MY_TENANT` and `MY_DEVICE`)
+Now that the device is waiting to receive commands, the application can start sending them
+(don't forget to set the environment variables `AMQP_NETWORK_IP`, `MY_TENANT` and `MY_DEVICE`):
 
 ~~~sh
 # in directory where the hono-cli-*-exec.jar file has been downloaded to
-java -jar hono-cli-*-exec.jar --hono.client.host=$AMQP_NETWORK_IP --hono.client.port=15672 --hono.client.username=consumer@HONO --hono.client.password=verysecret --tenant.id=$MY_TENANT --device.id=$MY_DEVICE --spring.profiles.active=command
+java -jar hono-cli-*-exec.jar app -H ${AMQP_NETWORK_IP} -P 15672 -u consumer@HONO -p verysecret --amqp command
 ~~~
 
-Note that this time the profile is `command` instead of `receiver`, which enables a different mode of the Command Line
-Client.
-
-The client will prompt you to enter the command's name, the payload to send and the payload's content type. 
-The example below illustrates how a one-way command to set the volume with a JSON payload is sent to the device.
+The example below illustrates how a one-way command to set the volume with a JSON payload is sent to the device
 
 ~~~sh
->>>>>>>>> Enter name of command for device [<DeviceId>] in tenant [<TenantId>] (prefix with 'ow:' to send one-way command):
-ow:setVolume
->>>>>>>>> Enter command payload:
-{"level": 50}
->>>>>>>>> Enter content type:
-application/json
-
-INFO  org.eclipse.hono.cli.app.Commander - Command sent to device
+# at the hono-cli/app/command> prompt
+ow --tenant ${MY_TENANT} --device ${MY_DEVICE} -n setVolume --payload '{"level": 50}'
 ~~~
 
 In the terminal for the simulated device you should see the received command as follows
 
-    command///req//setVolume {"level": 50}
+~~~plaintext
+command///req//setVolume {"level": 50}
+~~~
 
 ### Sending a Response to a Command
 
-Now that you have sent a one-way command to the device,  you may get to know _request/response_ commands where the
-device sends a response to the application. A _request/response_ command received from an application contains an
+Now that you have sent a one-way command to the device,  you may get to know *request-response* commands where the
+device sends a response to the application. A request-response command received from an application contains an
 identifier that is unique to each new command. The device must include this identifier in its response so that the
 application can correctly correlate the response with the request.
 
-If you send a _request/response_ command like this 
+If you send a request-response command like this 
 
 ~~~sh
->>>>>>>>> Enter name of command for device [<DeviceId>] in tenant [<TenantId>] (prefix with 'ow:' to send one-way command):
-setBrightness
->>>>>>>>> Enter command payload:
-{"brightness": 87}
->>>>>>>>> Enter content type:
-application/json
-
-INFO  org.eclipse.hono.cli.app.Commander - Command sent to device... [waiting for response for max. 60 seconds]
+# at the hono-cli/app/command> prompt
+req --tenant ${MY_TENANT} --device ${MY_DEVICE} -n setBrightness --payload '{"level": 87}'
 ~~~
 
-the application will wait up to 60 seconds for the device's response. 
+the application will wait up to 60 seconds for the device's response.
 
 In the terminal for the simulated device you should see the received command that looks like this
 
-    command///req/10117f669c12-09ef-416d-88c1-1787f894856d/setBrightness {"brightness": 87}
+~~~plaintext
+command///req/10117f669c12-09ef-416d-88c1-1787f894856d/setBrightness {"level": 87}
+~~~
 
-The element between `req` and `setBrightness` is the request identifier that must be included in the response.
+The topic segment between `req` and `setBrightness` is the request identifier that must be included in the response.
 
 You can cancel the command `mosquitto_sub` in the terminal of the device (press the key combination `Ctrl + C`) to reuse the 
 configuration with the  environment variables for sending the response.
-The following example shows how an answer can be sent with MQTT. Note that the actual identifier from the received
+The following example shows how a response can be sent via MQTT. Note that the actual identifier from the received
 command must be used.
 
 ~~~sh
 export REQ_ID=10117f669c12-09ef-416d-88c1-1787f894856d
-mosquitto_pub -h $MQTT_ADAPTER_IP -u $MY_DEVICE@$MY_TENANT -P $MY_PWD -t command///res/$REQ_ID/200 -m '{"success": true}'
+mosquitto_pub -h ${MQTT_ADAPTER_IP} -u ${MY_DEVICE}@${MY_TENANT} -P ${MY_PWD} -t command///res/${REQ_ID}/200 -m '{"current-level": 87}'
 ~~~
 
 The `200` at the end of the topic is an HTTP status code that reports the result of processing the command to the
 application.
 
-If the Command Line Client has successfully received the response in time, it will print it to the console.
-This looks like this:
+If the Command Line Client has successfully received the response in time, it will print a line to the console's
+*standard output*:
 
-~~~sh
-INFO  org.eclipse.hono.cli.app.Commander - Received Command response: {"success": true}
+~~~plaintext
+res 4412abe2-f219-4099-ae14-b446604ae9c6 200 application/octet-stream {"current-level": 87}
 ~~~
 
-If the 60 seconds have already expired, an error message is logged.
-In this case you can send a new command or restart the Command Line Client with a higher timeout (append
-`--command.timeoutInSeconds=120`).
-    
-Congratulations. Now you have successfully sent commands to a device and responded to them. 
-For more information on Command &amp; Control refer to
+The command line client will print an error message to *System.err* if the device does not respond to the command
+in time. By default, the client will wait for 60 seconds for the response, a longer timeout can be set using the `-r`
+option:
+
+~~~sh
+# at the hono-cli/app/command> prompt
+req --tenant ${MY_TENANT} --device ${MY_DEVICE} -n setBrightness --payload '{"level": 87}' -r 120
+~~~
+
+Congratulations. Now you have successfully sent commands to a device and responded to them.
+For more information on Command & Control refer to
 [Commands using HTTP]({{% doclink "/user-guide/http-adapter/#specifying-the-time-a-device-will-wait-for-a-response" %}}) 
 and [Commands using MQTT]({{% doclink "/user-guide/mqtt-adapter/#command--control" %}}).
 The [Command and Control Concepts]({{% doclink "/concepts/command-and-control/" %}}) page contains sequence diagrams that

@@ -76,6 +76,7 @@ you can use the Sandbox. Run the following commands to set some environment vari
 export REGISTRY_IP=hono.eclipseprojects.io
 export HTTP_ADAPTER_IP=hono.eclipseprojects.io
 export MQTT_ADAPTER_IP=hono.eclipseprojects.io
+export KAFKA_IP=hono.eclipseprojects.io
 ~~~
 
 and then proceed to the [Overview of Hono Components]({{< relref "#overview-of-hono-components" >}}).
@@ -104,12 +105,13 @@ will be used during the guide
 export REGISTRY_IP=$(kubectl get service eclipse-hono-service-device-registry-ext --output="jsonpath={.status.loadBalancer.ingress[0]['hostname','ip']}" -n hono)
 export HTTP_ADAPTER_IP=$(kubectl get service eclipse-hono-adapter-http-vertx --output="jsonpath={.status.loadBalancer.ingress[0]['hostname','ip']}" -n hono)
 export MQTT_ADAPTER_IP=$(kubectl get service eclipse-hono-adapter-mqtt-vertx --output="jsonpath={.status.loadBalancer.ingress[0]['hostname','ip']}" -n hono)
+export KAFKA_IP=$(kubectl get service eclipse-hono-kafka-0-external --output="jsonpath={.status.loadBalancer.ingress[0]['hostname','ip']}" -n hono)
 ~~~
 
 Verify the last step with
 
 ~~~sh
-echo $REGISTRY_IP
+echo ${REGISTRY_IP}
 ~~~
 
 If this does not print an IP address, check that `minikube tunnel` is running.
@@ -121,15 +123,15 @@ matching configuration of the Kafka clients they use, external connections, like
 provided with configuration that enables TLS and a truststore file containing the broker certificate.
 The following guide assumes that for a local deployment in a Minikube cluster TLS is enabled on the Kafka broker.
 
-**NB** The instructions below disable hostname verification (by setting the Kafka config property
+**NB** The instructions below disable host name verification (by setting the Kafka config property
 `ssl.endpoint.identification.algorithm` to an empty string) because the external IP in the Minikube cluster is dynamic
-and not included in the certificate. Don't disable hostname verification in productive setups!
+and not included in the certificate. Do not disable host name verification in a production environment!
 {{% /note %}}
 
 <a name="overview"></a>
 ## Overview of Hono Components
 
-Hono consists of a set of microservices which are deployed as Docker containers. The diagram below provides an overview
+Hono consists of a set of micro services which are deployed as Docker containers. The diagram below provides an overview
 of the containers that are part of the example deployment of Hono on the Sandbox or a local Minikube cluster.
 
 {{< figure src="Hono_instance.svg" title="Components of the example Hono deployment with Kafka"
@@ -171,11 +173,11 @@ Register a tenant that is configured for Kafka based messaging using Hono's Devi
 random tenant identifier will be generated):
 
 ~~~sh
-curl -i -X POST -H "content-type: application/json" http://$REGISTRY_IP:28080/v1/tenants --data-binary '{
+curl -i -X POST -H "content-type: application/json" --data-binary '{
   "ext": {
     "messaging-type": "kafka"
   }
-}'
+}' http://${REGISTRY_IP}:28080/v1/tenants
 
 HTTP/1.1 201 Created
 etag: becc93d7-ab0f-48ec-ad26-debdf339cbf4
@@ -200,7 +202,7 @@ export MY_TENANT=85f63e23-1b78-4156-8500-debcbd1a8d35
 Register a device using Hono's Device Registry's management HTTP API (a random device identifier will be assigned):
 
 ~~~sh
-curl -i -X POST http://$REGISTRY_IP:28080/v1/devices/$MY_TENANT
+curl -i -X POST http://${REGISTRY_IP}:28080/v1/devices/${MY_TENANT}
 
 HTTP/1.1 201 Created
 etag: 68eab243-3df9-457d-a0ab-b702e57c0c17
@@ -229,11 +231,11 @@ password):
 export MY_PWD=my-pwd
 curl -i -X PUT -H "content-type: application/json" --data-binary '[{
   "type": "hashed-password",
-  "auth-id": "'$MY_DEVICE'",
+  "auth-id": "'${MY_DEVICE}'",
   "secrets": [{
-      "pwd-plain": "'$MY_PWD'"
+      "pwd-plain": "'${MY_PWD}'"
   }]
-}]' http://$REGISTRY_IP:28080/v1/credentials/$MY_TENANT/$MY_DEVICE
+}]' http://${REGISTRY_IP}:28080/v1/credentials/${MY_TENANT}/${MY_DEVICE}
 
 HTTP/1.1 204 Updated
 etag: cf91fd4d-7111-4e8a-af68-c703993a8be1
@@ -252,38 +254,35 @@ to all telemetry and event messages and log the messages to the console.
 
 Open a new terminal window to run the client from the command line.
 
-If you are using the Sandbox server (make sure to replace `my-tenant` with your tenant identifier):
+If you are using the Sandbox server (make sure to replace `85f63e23-1b78-4156-8500-debcbd1a8d35` with your tenant identifier):
 
 ~~~sh
 # in directory where the hono-cli-*-exec.jar file has been downloaded to
-export MY_TENANT=my-tenant
-java -jar hono-cli-*-exec.jar --spring.profiles.active=receiver,kafka,sandbox --tenant.id=$MY_TENANT
+export MY_TENANT=85f63e23-1b78-4156-8500-debcbd1a8d35
+java -jar hono-cli-*-exec.jar app --sandbox consume --tenant ${MY_TENANT}
 ~~~
 
-Otherwise, if you are using a local Minikube cluster, first save the trust store file of the Kafka broker to your file
-system with the following command (adapt the value of environment variable `KAFKA_TRUSTSTORE_PATH` to the location that
-the trust store should be saved to):
+and continue with the next section.
+
+Otherwise, if you are using your own local Hono installation, first save the trust store file of the Kafka broker to
+your local file system using the following command (adapt the environment variable `KAFKA_TRUSTSTORE_PATH` to change
+where the trust store will be written to):
 
 ~~~sh
 export KAFKA_TRUSTSTORE_PATH=/tmp/truststore.pem
 kubectl get secrets eclipse-hono-kafka-certs --template="{{index .data \"ca.crt\" | base64decode}}" -n hono > $KAFKA_TRUSTSTORE_PATH
 ~~~
 
-Then set the following environment variables and start the client (make sure to replace `my-tenant` with your tenant
-identifier):
+Then set the following environment variables and start the client (make sure to replace
+`85f63e23-1b78-4156-8500-debcbd1a8d35` with your tenant identifier):
 
 ~~~sh
 # in directory where the hono-cli-*-exec.jar file has been downloaded to
-export MY_TENANT=my-tenant
+export MY_TENANT=85f63e23-1b78-4156-8500-debcbd1a8d35
 export KAFKA_IP=$(kubectl get service eclipse-hono-kafka-0-external --output="jsonpath={.status.loadBalancer.ingress[0]['hostname','ip']}" -n hono)
 export KAFKA_PORT=$(kubectl get service eclipse-hono-kafka-0-external --output="jsonpath={.spec.ports[?(@.name=='tcp-kafka')].port}" -n hono)
-java -jar hono-cli-*-exec.jar --hono.kafka.commonClientConfig.bootstrap.servers=$KAFKA_IP:$KAFKA_PORT --hono.kafka.commonClientConfig.ssl.truststore.location=$KAFKA_TRUSTSTORE_PATH --hono.kafka.commonClientConfig.ssl.truststore.type=PEM --spring.profiles.active=receiver,kafka,local --tenant.id=$MY_TENANT
+java -jar hono-cli-*-exec.jar app -H $KAFKA_IP -P $KAFKA_PORT -u hono -p hono-secret consume --tenant ${MY_TENANT}
 ~~~
-
-
-Note that the profiles `sandbox` respectively `local` enable default configurations for TLS and the authentication of an
-existing example Kafka user.
-
 
 ## Publishing Telemetry Data to the HTTP Adapter
 
@@ -292,18 +291,17 @@ protocol adapters. First, you will simulate a device publishing data to Hono usi
 Go back to the original terminal and run:
 
 ~~~sh
-curl -i -u $MY_DEVICE@$MY_TENANT:$MY_PWD -H 'Content-Type: application/json' --data-binary '{"temp": 5}' http://$HTTP_ADAPTER_IP:8080/telemetry
+curl -i -u ${MY_DEVICE}@${MY_TENANT}:${MY_PWD} -H 'Content-Type: application/json' --data-binary '{"temp": 5}' http://${HTTP_ADAPTER_IP}:8080/telemetry
 
 HTTP/1.1 202 Accepted
 Content-Length: 0
 ~~~
 
-If you have started the downstream application as described above, you should now see the telemetry message being logged
+If you have started the downstream application as described above, you should now see the telemetry message being output
 to the application's console in the other terminal. The output should look something like this:
 
 ~~~sh
-13:36:49.169 [vert.x-eventloop-thread-0] INFO  org.eclipse.hono.cli.app.Receiver - received telemetry message [device: my-device, content-type: application/json]: {"temp": 5}
-13:36:49.170 [vert.x-eventloop-thread-0] INFO  org.eclipse.hono.cli.app.Receiver - ... with properties: {orig_adapter=hono-http, qos=0, device_id=my-device, importance=high, uber-trace-id=6fd25dfcc1904fa1:95b598b9325f7ea3:a2ab14cbc5032ec9:0, content-type=application/json, orig_address=/telemetry}
+t 4412abe2-f219-4099-ae14-b446604ae9c6 application/json {"temp": 5} {orig_adapter=hono-http, device_id=my-device, orig_address=/telemetry}
 ~~~
 
 You can publish more data simply by re-running the `curl` command above with arbitrary payload.
@@ -317,7 +315,7 @@ on how that works and additional examples for interacting with Hono via HTTP, pl
 In a similar way you can upload events:
 
 ~~~sh
-curl -i -u $MY_DEVICE@$MY_TENANT:$MY_PWD -H 'Content-Type: application/json' --data-binary '{"alarm": "fire"}' http://$HTTP_ADAPTER_IP:8080/event
+curl -i -u ${MY_DEVICE}@${MY_TENANT}:${MY_PWD} -H 'Content-Type: application/json' --data-binary '{"alarm": "fire"}' http://${HTTP_ADAPTER_IP}:8080/event
 
 HTTP/1.1 202 Accepted
 Content-Length: 0
@@ -331,7 +329,7 @@ Devices can also publish data to Hono using the MQTT protocol. If you have insta
 client, you can run the following command to publish arbitrary telemetry data to Hono's MQTT adapter using QoS 0:
 
 ~~~sh
-mosquitto_pub -h $MQTT_ADAPTER_IP -u $MY_DEVICE@$MY_TENANT -P $MY_PWD -t telemetry -m '{"temp": 5}'
+mosquitto_pub -h ${MQTT_ADAPTER_IP} -u ${MY_DEVICE}@${MY_TENANT} -P ${MY_PWD} -t telemetry -m '{"temp": 5}'
 ~~~
 
 Again, you should now see the telemetry message being logged to console of the downstream application.
@@ -345,10 +343,10 @@ and additional examples for interacting with Hono via MQTT, please refer to the
 In a similar way you can upload events:
 
 ~~~sh
-mosquitto_pub -h $MQTT_ADAPTER_IP -u $MY_DEVICE@$MY_TENANT -P $MY_PWD -t event -q 1 -m '{"alarm": "fire"}'
+mosquitto_pub -h ${MQTT_ADAPTER_IP} -u ${MY_DEVICE}@${MY_TENANT} -P ${MY_PWD} -t event -q 1 -m '{"alarm": "fire"}'
 ~~~
 
-Again, you should now see the telemetry message being logged to console of the downstream application.
+Again, you should now see the event being logged to console of the downstream application.
 
 {{% note title="Congratulations" %}}
 You have successfully connected a device to Hono and published sensor data for consumption by an application connected
@@ -387,101 +385,85 @@ Create a subscription to the command topic in the terminal for the simulated dev
 variables `MQTT_ADAPTER_IP`, `MY_TENANT` and `MY_DEVICE`)
  
  ~~~sh
- mosquitto_sub -v -h $MQTT_ADAPTER_IP -u $MY_DEVICE@$MY_TENANT -P $MY_PWD -t command///req/#
+ mosquitto_sub -v -h ${MQTT_ADAPTER_IP} -u ${MY_DEVICE}@${MY_TENANT} -P ${MY_PWD} -t command///req/#
  ~~~
 
-Now that the device is waiting to receive commands, the application can start sending them.
-Start the Command Line Client in the terminal for the application side.
-If you are using the Sandbox server (don't forget to set the environment variables `MY_TENANT` and `MY_DEVICE`):
+Now that the device is waiting to receive commands, the application can start sending them
+(don't forget to set the environment variables `AMQP_NETWORK_IP`, `MY_TENANT` and `MY_DEVICE`):
 
 ~~~sh
 # in directory where the hono-cli-*-exec.jar file has been downloaded to
-java -jar hono-cli-*-exec.jar --spring.profiles.active=command,kafka,sandbox --tenant.id=$MY_TENANT --device.id=$MY_DEVICE
+java -jar hono-cli-*-exec.jar app -H ${KAFKA_IP} -P 9094 -u hono -p hono-secret command
 ~~~
 
-Otherwise, if you are using a local Minikube cluster (don't forget to set the environment variables `KAFKA_IP`,
-`KAFKA_PORT`, `KAFKA_TRUSTSTORE_PATH`, `MY_TENANT` and `MY_DEVICE`):
+The example below illustrates how a one-way command to set the volume with a JSON payload is sent to the device
 
 ~~~sh
-# in directory where the hono-cli-*-exec.jar file has been downloaded to
-java -jar hono-cli-*-exec.jar --hono.kafka.commonClientConfig.bootstrap.servers=$KAFKA_IP:$KAFKA_PORT --hono.kafka.commonClientConfig.ssl.truststore.location=$KAFKA_TRUSTSTORE_PATH --spring.profiles.active=command,kafka,local --tenant.id=$MY_TENANT --device.id=$MY_DEVICE
-~~~
-
-Note that this time the profile `command` is activated instead of `receiver`, which enables a different mode of the
-Command Line Client.
-
-The client will prompt you to enter the command's name, the payload to send and the payload's content type. 
-The example below illustrates how a one-way command to set the volume with a JSON payload is sent to the device.
-
-~~~sh
->>>>>>>>> Enter name of command for device [<DeviceId>] in tenant [<TenantId>] (prefix with 'ow:' to send one-way command):
-ow:setVolume
->>>>>>>>> Enter command payload:
-{"level": 50}
->>>>>>>>> Enter content type:
-application/json
-
-INFO  org.eclipse.hono.cli.app.Commander - Command sent to device
+# at the hono-cli/app/command> prompt
+ow --tenant ${MY_TENANT} --device ${MY_DEVICE} -n setVolume --payload '{"level": 50}'
 ~~~
 
 In the terminal for the simulated device you should see the received command as follows
 
-    command///req//setVolume {"level": 50}
+~~~plaintext
+command///req//setVolume {"level": 50}
+~~~
 
 ### Sending a Response to a Command
 
-Now that you have sent a one-way command to the device,  you may get to know _request/response_ commands where the
-device sends a response to the application.
-A _request/response_ command received from an application contains an identifier that is unique to each new command.
-The device must include this identifier in its response so that the application can correctly correlate the response
-with the request.
+Now that you have sent a one-way command to the device,  you may get to know *request-response* commands where the
+device sends a response to the application. A request-response command received from an application contains an
+identifier that is unique to each new command. The device must include this identifier in its response so that the
+application can correctly correlate the response with the request.
 
-If you send a _request/response_ command like this 
+If you send a request-response command like this 
 
 ~~~sh
->>>>>>>>> Enter name of command for device [<DeviceId>] in tenant [<TenantId>] (prefix with 'ow:' to send one-way command):
-setBrightness
->>>>>>>>> Enter command payload:
-{"brightness": 87}
->>>>>>>>> Enter content type:
-application/json
-
-INFO  org.eclipse.hono.cli.app.Commander - Command sent to device... [waiting for response for max. 60 seconds]
+# at the hono-cli/app/command> prompt
+req --tenant ${MY_TENANT} --device ${MY_DEVICE} -n setBrightness --payload '{"level": 87}'
 ~~~
 
-the application will wait up to 60 seconds for the device's response. 
+the application will wait up to 60 seconds for the device's response.
 
 In the terminal for the simulated device you should see the received command that looks like this
 
-    command///req/10117f669c12-09ef-416d-88c1-1787f894856d/setBrightness {"brightness": 87}
+~~~plaintext
+command///req/10117f669c12-09ef-416d-88c1-1787f894856d/setBrightness {"level": 87}
+~~~
 
-The element between `req` and `setBrightness` is the request identifier that must be included in the response.
+The topic segment between `req` and `setBrightness` is the request identifier that must be included in the response.
 
 You can cancel the command `mosquitto_sub` in the terminal of the device (press the key combination `Ctrl + C`) to reuse the 
 configuration with the  environment variables for sending the response.
-The following example shows how an answer can be sent with MQTT. Note that the actual identifier from the received
+The following example shows how a response can be sent via MQTT. Note that the actual identifier from the received
 command must be used.
 
 ~~~sh
 export REQ_ID=10117f669c12-09ef-416d-88c1-1787f894856d
-mosquitto_pub -h $MQTT_ADAPTER_IP -u $MY_DEVICE@$MY_TENANT -P $MY_PWD -t command///res/$REQ_ID/200 -m '{"success": true}'
+mosquitto_pub -h ${MQTT_ADAPTER_IP} -u ${MY_DEVICE}@${MY_TENANT} -P ${MY_PWD} -t command///res/${REQ_ID}/200 -m '{"current-level": 87}'
 ~~~
 
 The `200` at the end of the topic is an HTTP status code that reports the result of processing the command to the
 application.
 
-If the Command Line Client has successfully received the response in time, it will print it to the console. This looks
-like this:
+If the Command Line Client has successfully received the response in time, it will print a line to the console's
+*standard output*:
 
-~~~sh
-INFO  org.eclipse.hono.cli.app.Commander - Received Command response: {"success": true}
+~~~plaintext
+res 4412abe2-f219-4099-ae14-b446604ae9c6 200 application/octet-stream {"current-level": 87}
 ~~~
 
-If the 60 seconds have already expired, an error message is logged.
-In this case you can send a new command or restart the Command Line Client with a higher timeout (append `--command.timeoutInSeconds=120`).
-    
-Congratulations. Now you have successfully sent commands to a device and responded to them. For more information on
-Command &amp; Control refer to
+The command line client will print an error message to *System.err* if the device does not respond to the command
+in time. By default, the client will wait for 60 seconds for the response, a longer timeout can be set using the `-r`
+option:
+
+~~~sh
+# at the hono-cli/app/command> prompt
+req --tenant ${MY_TENANT} --device ${MY_DEVICE} -n setBrightness --payload '{"level": 87}' -r 120
+~~~
+
+Congratulations. Now you have successfully sent commands to a device and responded to them.
+For more information on Command & Control refer to
 [Commands using HTTP]({{% doclink "/user-guide/http-adapter/#specifying-the-time-a-device-will-wait-for-a-response" %}}) 
 and [Commands using MQTT]({{% doclink "/user-guide/mqtt-adapter/#command--control" %}}).
 The [Command and Control Concepts]({{% doclink "/concepts/command-and-control/" %}}) page contains sequence diagrams that
