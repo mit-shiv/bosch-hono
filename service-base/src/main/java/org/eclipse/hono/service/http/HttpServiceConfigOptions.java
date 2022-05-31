@@ -14,6 +14,7 @@
 package org.eclipse.hono.service.http;
 
 import org.eclipse.hono.config.ServiceOptions;
+import org.eclipse.hono.util.Constants;
 
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
@@ -54,4 +55,16 @@ public interface HttpServiceConfigOptions {
      */
     @WithDefault("Hono")
     String realm();
+
+    /**
+     * Gets the idle timeout.
+     * <p>
+     * The idle timeout is used when data is not received, the connection is timeout and closed.
+     * <p>
+     * The default value is {@code 60}.
+     *
+     * @return The idle timeout.
+     */
+    @WithDefault(Constants.DEFAULT_IDLE_TIMEOUT_SEC)
+    int idleTimeout();
 }

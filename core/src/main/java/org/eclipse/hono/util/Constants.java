@@ -174,6 +174,12 @@ public final class Constants {
      */
     public static final String SERVER_ROLE_UNKNOWN = "unknown";
 
+    /**
+     * The default amount of time (seconds) after which a connection will be closed
+     * if no data is received.
+     */
+    public static final String DEFAULT_IDLE_TIMEOUT_SEC = "60";
+
     private Constants() {
     }
 }

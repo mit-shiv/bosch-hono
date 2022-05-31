@@ -29,6 +29,7 @@ public class HttpServiceConfigProperties extends ServiceConfigProperties {
 
     private boolean authenticationRequired = true;
     private String realm = DEFAULT_REALM;
+    private int idleTimeout = 60;
 
     /**
      * Creates default properties.
@@ -47,6 +48,7 @@ public class HttpServiceConfigProperties extends ServiceConfigProperties {
         super(options.commonOptions());
         this.setAuthenticationRequired(options.authenticationRequired());
         this.setRealm(options.realm());
+        this.setIdleTimeout(options.idleTimeout());
     }
 
     /**
@@ -102,5 +104,31 @@ public class HttpServiceConfigProperties extends ServiceConfigProperties {
      */
     public final void setRealm(final String realm) {
         this.realm = Objects.requireNonNull(realm);
+    }
+
+    /**
+     * Gets the idle timeout.
+     * <p>
+     * The idle timeout is used when data is not received, the connection is timeout and closed.
+     * <p>
+     * The default value is {@code 60}.
+     *
+     * @return The idle timeout.
+     */
+    public int getIdleTimeout() {
+        return idleTimeout;
+    }
+
+    /**
+     * Sets the idle timeout.
+     * <p>
+     * The idle timeout is used when data is not received, the connection is timeout and closed.
+     * <p>
+     * The default value is {@code 60}.
+     *
+     * @param idleTimeout The idleTimeout
+     */
+    public void setIdleTimeout(final int idleTimeout) {
+        this.idleTimeout = idleTimeout;
     }
 }

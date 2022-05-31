@@ -48,7 +48,10 @@ public abstract class HttpServiceBase<T extends ServiceConfigProperties> extends
      */
     protected static final String DEFAULT_UPLOADS_DIRECTORY = "/tmp";
 
+    private static final int MAX_CHUNK_SIZE = 4096;
     private final Map<String, HttpEndpoint> endpoints = new HashMap<>();
+
+    private final HttpServiceConfigProperties httpServiceConfigProperties = new HttpServiceConfigProperties();
 
     private HttpServer server;
     private HttpServer insecureServer;
@@ -180,9 +183,9 @@ public abstract class HttpServiceBase<T extends ServiceConfigProperties> extends
      * <li>a default failure handler,</li>
      * <li>a handler to keep track of the tracing span created for the request by means of the Vert.x/Quarkus
      * instrumentation,</li>
+     * <li>the authentication handler, set via {@link #setAuthHandler(AuthenticationHandler)}.</li>
      * <li>a handler limiting the body size of requests to the maximum payload size set in the <em>config</em>
      * properties.</li>
-     * <li>the authentication handler, set via {@link #setAuthHandler(AuthenticationHandler)}.</li>
      * </ul>
      *
      * @return The newly created router (never {@code null}).
@@ -197,6 +200,10 @@ public abstract class HttpServiceBase<T extends ServiceConfigProperties> extends
         matchAllFailuresRoute.failureHandler(new DefaultFailureHandler());
 
         final Route matchAllRoute = router.route();
+        if (httpServiceConfigProperties.isAuthenticationRequired()) {
+            // 0. AuthHandler
+            addAuthHandler(router);
+        }
         // route name will be used as HTTP request tracing span name,
         // ensuring a fixed name is set in case no other route matches (otherwise the span name would unsuitably be set to the request path)
         matchAllRoute.setName("/* (default route)");
@@ -206,8 +213,6 @@ public abstract class HttpServiceBase<T extends ServiceConfigProperties> extends
         log.info("limiting size of inbound request body to {} bytes", getConfig().getMaxPayloadSize());
         matchAllRoute.handler(BodyHandler.create().setUploadsDirectory(DEFAULT_UPLOADS_DIRECTORY)
                 .setBodyLimit(getConfig().getMaxPayloadSize()));
-        // 3. AuthHandler
-        addAuthHandler(router);
         return router;
     }
 
@@ -277,8 +282,10 @@ public abstract class HttpServiceBase<T extends ServiceConfigProperties> extends
     protected HttpServerOptions getHttpServerOptions() {
 
         final HttpServerOptions options = new HttpServerOptions();
-        options.setHost(getConfig().getBindAddress()).setPort(getConfig().getPort(getPortDefaultValue()))
-                .setMaxChunkSize(4096);
+        options.setHost(getConfig().getBindAddress())
+                .setPort(getConfig().getPort(getPortDefaultValue()))
+                .setMaxChunkSize(MAX_CHUNK_SIZE)
+                .setIdleTimeout(httpServiceConfigProperties.getIdleTimeout());
         addTlsKeyCertOptions(options);
         addTlsTrustOptions(options);
         return options;
@@ -298,7 +305,9 @@ public abstract class HttpServiceBase<T extends ServiceConfigProperties> extends
 
         final HttpServerOptions options = new HttpServerOptions();
         options.setHost(getConfig().getInsecurePortBindAddress())
-                .setPort(getConfig().getInsecurePort(getInsecurePortDefaultValue())).setMaxChunkSize(4096);
+                .setPort(getConfig().getInsecurePort(getInsecurePortDefaultValue()))
+                .setMaxChunkSize(MAX_CHUNK_SIZE)
+                .setIdleTimeout(httpServiceConfigProperties.getIdleTimeout());
         return options;
     }
 
