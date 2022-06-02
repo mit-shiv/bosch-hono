@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2019, 2021 Contributors to the Eclipse Foundation
+ * Copyright (c) 2019, 2022 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -25,6 +25,7 @@ import org.eclipse.hono.client.amqp.connection.SendMessageSampler;
 import org.eclipse.hono.client.util.ServiceClient;
 import org.eclipse.hono.tracing.TracingHelper;
 import org.eclipse.hono.util.Lifecycle;
+import org.eclipse.hono.util.LifecycleStatus;
 import org.eclipse.hono.util.MessagingClient;
 import org.eclipse.hono.util.MessagingType;
 import org.slf4j.Logger;
@@ -50,6 +51,10 @@ public abstract class AbstractServiceClient implements ConnectionLifecycle<HonoC
      * A logger to be shared with subclasses.
      */
     protected final Logger log = LoggerFactory.getLogger(getClass());
+    /**
+     * The current life cycle state of this client.
+     */
+    protected final LifecycleStatus lifecycleStatus = new LifecycleStatus();
     /**
      * The connection to use for interacting with Hono.
      */
@@ -265,12 +270,28 @@ public abstract class AbstractServiceClient implements ConnectionLifecycle<HonoC
     }
 
     /**
+     * Adds a handler to be invoked with a succeeded future once this client is ready to be used.
+     *
+     * @param handler The handler to invoke. The handler will never be invoked with a failed future.
+     */
+    public final void addOnClientReadyHandler(final Handler<AsyncResult<Void>> handler) {
+        if (handler != null) {
+            lifecycleStatus.addOnStartedHandler(handler);
+        }
+    }
+
+    /**
      * {@inheritDoc}
      *
      * @return The outcome of the connection's {@link HonoConnection#connect()} method.
      */
     @Override
     public Future<Void> start() {
+        if (lifecycleStatus.isStarting()) {
+            return Future.succeededFuture();
+        } else if (!lifecycleStatus.setStarting()) {
+            return Future.failedFuture(new IllegalStateException("sender is already started/stopping"));
+        }
         return connection.connect()
                 .onSuccess(ok -> log.info("connection to {} endpoint has been established", connection.getConfig().getServerRole()))
                 .onFailure(t -> log.warn("failed to establish connection to {} endpoint", connection.getConfig().getServerRole(), t))
@@ -284,10 +305,12 @@ public abstract class AbstractServiceClient implements ConnectionLifecycle<HonoC
      */
     @Override
     public Future<Void> stop() {
-        final Promise<Void> result = Promise.promise();
-        connection.shutdown(result);
-        return result.future()
-            .onSuccess(ok -> log.info("connection to {} endpoint has been closed",
-                    connection.getConfig().getServerRole()));
+        return lifecycleStatus.runStopAttempt(() -> {
+            final Promise<Void> result = Promise.promise();
+            connection.shutdown(result);
+            return result.future()
+                    .onSuccess(ok -> log.info("connection to {} endpoint has been closed",
+                            connection.getConfig().getServerRole()));
+        });
     }
 }

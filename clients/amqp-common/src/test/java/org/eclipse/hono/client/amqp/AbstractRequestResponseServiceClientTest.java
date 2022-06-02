@@ -11,7 +11,6 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 
-
 package org.eclipse.hono.client.amqp;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -41,7 +40,6 @@ import com.github.benmanes.caffeine.cache.Cache;
 import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
-
 
 /**
  * Tests verifying the behavior of {@link AbstractRequestResponseServiceClient}.
@@ -112,6 +110,7 @@ class AbstractRequestResponseServiceClientTest {
      */
     @Test
     public void testStopShutsDownConnection() {
+        client.start();
         client.stop();
         verify(connection).shutdown(VertxMockSupport.anyHandler());
     }
