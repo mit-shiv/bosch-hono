@@ -165,6 +165,16 @@ public class AbstractTenantManagementServiceTest {
         }
 
         @Override
+        public Future<Void> start() {
+            return Future.succeededFuture();
+        }
+
+        @Override
+        public Future<Void> stop() {
+            return Future.succeededFuture();
+        }
+
+        @Override
         protected Future<OperationResult<Id>> processCreateTenant(final String tenantId, final Tenant tenantObj,
                 final Span span) {
             return Future.succeededFuture(OperationResult.ok(HttpURLConnection.HTTP_CREATED, Id.of(tenantId),

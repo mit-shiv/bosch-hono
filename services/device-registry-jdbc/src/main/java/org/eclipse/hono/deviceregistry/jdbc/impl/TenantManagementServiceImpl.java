@@ -47,6 +47,16 @@ public class TenantManagementServiceImpl extends AbstractTenantManagementService
     }
 
     @Override
+    public Future<Void> start() {
+        return Future.succeededFuture();
+    }
+
+    @Override
+    public Future<Void> stop() {
+        return Future.succeededFuture();
+    }
+
+    @Override
     protected Future<OperationResult<Id>> processCreateTenant(
             final String tenantId,
             final Tenant tenantObj,
@@ -123,5 +133,4 @@ public class TenantManagementServiceImpl extends AbstractTenantManagementService
                 .recover(e -> Services.recover(e));
 
     }
-
 }

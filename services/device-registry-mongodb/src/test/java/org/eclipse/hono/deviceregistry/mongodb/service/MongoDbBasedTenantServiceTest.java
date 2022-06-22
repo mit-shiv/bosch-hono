@@ -20,6 +20,7 @@ import java.net.HttpURLConnection;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
+import org.eclipse.hono.deviceregistry.mongodb.MongoDbDeviceRegistryMetrics;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedTenantsConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.model.MongoDbBasedTenantDao;
 import org.eclipse.hono.deviceregistry.util.Assertions;
@@ -36,12 +37,14 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.opentracing.noop.NoopSpan;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
+import io.vertx.ext.mongo.MongoClient;
 import io.vertx.junit5.Timeout;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -73,7 +76,8 @@ public class MongoDbBasedTenantServiceTest implements AbstractTenantServiceTest 
         vertx = Vertx.vertx();
         dao = MongoDbTestUtils.getTenantDao(vertx, "hono-tenants-test");
         tenantService = new MongoDbBasedTenantService(dao, config);
-        tenantManagementService = new MongoDbBasedTenantManagementService(vertx, dao, config);
+        final MongoClient mongoClient = Mockito.mock(MongoClient.class);
+        tenantManagementService = new MongoDbBasedTenantManagementService(vertx, dao, config, MongoDbDeviceRegistryMetrics.NOOP, mongoClient);
         dao.createIndices().onComplete(testContext.succeedingThenComplete());
     }
 

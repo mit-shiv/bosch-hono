@@ -19,6 +19,7 @@ import javax.enterprise.inject.Produces;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
+import org.eclipse.hono.deviceregistry.mongodb.MongoDbDeviceRegistryMetrics;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedCredentialsConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedRegistrationConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedTenantsConfigProperties;
@@ -36,6 +37,7 @@ import org.eclipse.hono.service.management.device.DeviceManagementService;
 import org.eclipse.hono.service.management.tenant.TenantManagementService;
 
 import io.vertx.core.Vertx;
+import io.vertx.ext.mongo.MongoClient;
 
 /**
  * A producer of the service instances implementing Hono's Device Registry Management API.
@@ -56,6 +58,9 @@ public class ManagementServicesProducer {
     @Inject
     MongoDbBasedCredentialsConfigProperties credentialsServiceProperties;
 
+    @Inject
+    MongoDbDeviceRegistryMetrics metrics;
+
     /**
      * Creates a service for retrieving tenant information.
      *
@@ -72,16 +77,18 @@ public class ManagementServicesProducer {
      * Creates a Tenant management service instance.
      *
      * @param tenantDao The DAO for accessing tenant data.
+     * @param mongoClient The client to use for accessing the Mongo DB.
      * @return The service.
      */
     @Produces
     @Singleton
-    public TenantManagementService tenantManagementService(final TenantDao tenantDao) {
-
+    public TenantManagementService tenantManagementService(final TenantDao tenantDao, final MongoClient mongoClient) {
         return new MongoDbBasedTenantManagementService(
                 vertx,
                 tenantDao,
-                tenantServiceProperties);
+                tenantServiceProperties,
+                metrics,
+                mongoClient);
     }
 
     /**
