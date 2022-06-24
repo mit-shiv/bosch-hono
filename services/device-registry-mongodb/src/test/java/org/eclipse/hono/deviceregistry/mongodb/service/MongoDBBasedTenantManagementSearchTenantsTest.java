@@ -26,13 +26,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.TestInfo;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
-import io.vertx.ext.mongo.MongoClient;
 import io.vertx.junit5.Timeout;
 import io.vertx.junit5.VertxExtension;
 import io.vertx.junit5.VertxTestContext;
@@ -61,8 +59,7 @@ public class MongoDBBasedTenantManagementSearchTenantsTest implements AbstractTe
     public void setup(final VertxTestContext testContext) {
         vertx = Vertx.vertx();
         dao = MongoDbTestUtils.getTenantDao(vertx, "hono-search-tenants-test");
-        final MongoClient mongoClient = Mockito.mock(MongoClient.class);
-        tenantManagementService = new MongoDbBasedTenantManagementService(vertx, dao, config, MongoDbDeviceRegistryMetrics.NOOP, mongoClient);
+        tenantManagementService = new MongoDbBasedTenantManagementService(vertx, dao, config, MongoDbDeviceRegistryMetrics.NOOP);
         dao.createIndices().onComplete(testContext.succeedingThenComplete());
     }
 

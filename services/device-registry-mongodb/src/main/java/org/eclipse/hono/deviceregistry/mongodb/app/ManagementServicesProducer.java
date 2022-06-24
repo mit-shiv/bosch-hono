@@ -37,7 +37,6 @@ import org.eclipse.hono.service.management.device.DeviceManagementService;
 import org.eclipse.hono.service.management.tenant.TenantManagementService;
 
 import io.vertx.core.Vertx;
-import io.vertx.ext.mongo.MongoClient;
 
 /**
  * A producer of the service instances implementing Hono's Device Registry Management API.
@@ -77,18 +76,16 @@ public class ManagementServicesProducer {
      * Creates a Tenant management service instance.
      *
      * @param tenantDao The DAO for accessing tenant data.
-     * @param mongoClient The client to use for accessing the Mongo DB.
      * @return The service.
      */
     @Produces
     @Singleton
-    public TenantManagementService tenantManagementService(final TenantDao tenantDao, final MongoClient mongoClient) {
+    public TenantManagementService tenantManagementService(final TenantDao tenantDao) {
         return new MongoDbBasedTenantManagementService(
                 vertx,
                 tenantDao,
                 tenantServiceProperties,
-                metrics,
-                mongoClient);
+                metrics);
     }
 
     /**

@@ -35,18 +35,7 @@ public interface DeviceRegistryMetrics extends Metrics {
         }
 
         @Override
-        public void incrementTotalTenants() {
-            // Do nothing, used for tests only.
-        }
-
-        @Override
-        public void decrementTenants() {
-            // Do nothing, used for tests only.
-        }
-
-        @Override
-        public void setInitialTenantsCount(final long tenantsCount) {
-            // Do nothing, used for tests only.            
+        public void registerInitialTenantsCount() {
         }
     }
 
@@ -56,18 +45,7 @@ public interface DeviceRegistryMetrics extends Metrics {
     DeviceRegistryMetrics NOOP = new Noop();
 
     /**
-     * Increment metric when a new Tenant is created.
+     * Initiate a registration of gauge metric in {@link MeterRegistry} for the total Tenants count.
      */
-    void incrementTotalTenants();
-
-    /**
-     * Decrement metric when a Tenant is deleted.
-     */
-    void decrementTenants();
-
-    /**
-     * Set the initial tenants count. Will be called on startup
-     * @param tenantsCount tenants count
-     */
-    void setInitialTenantsCount(long tenantsCount);
+    void registerInitialTenantsCount();
 }

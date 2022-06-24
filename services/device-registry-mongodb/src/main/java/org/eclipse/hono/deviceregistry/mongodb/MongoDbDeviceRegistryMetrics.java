@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2018, 2021 Contributors to the Eclipse Foundation
+ * Copyright (c) 2022 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -10,6 +10,7 @@
  *
  * SPDX-License-Identifier: EPL-2.0
  */
+
 package org.eclipse.hono.deviceregistry.mongodb;
 
 import org.eclipse.hono.service.DeviceRegistryMetrics;
@@ -29,18 +30,7 @@ public interface MongoDbDeviceRegistryMetrics extends DeviceRegistryMetrics {
         }
 
         @Override
-        public void incrementTotalTenants() {
-            // Do nothing, used for tests only.
-        }
-
-        @Override
-        public void decrementTenants() {
-            // Do nothing, used for tests only.
-        }
-
-        @Override
-        public void setInitialTenantsCount(final long tenantsCount) {
-            // Do nothing, used for tests only.            
+        public void registerInitialTenantsCount() {
         }
     }
 

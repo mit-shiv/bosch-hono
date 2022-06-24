@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2021, 2022 Contributors to the Eclipse Foundation
+ * Copyright (c) 2022 Contributors to the Eclipse Foundation
  *
  * See the NOTICE file(s) distributed with this work for additional
  * information regarding copyright ownership.
@@ -18,9 +18,12 @@ import javax.enterprise.inject.Produces;
 import javax.inject.Singleton;
 
 import org.eclipse.hono.deviceregistry.mongodb.MicrometerBasedMongoDbDeviceRegistryMetrics;
+import org.eclipse.hono.deviceregistry.mongodb.MongoDbDeviceRegistryMetrics;
+import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedTenantsConfigProperties;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.vertx.core.Vertx;
+import io.vertx.ext.mongo.MongoClient;
 
 /**
  * A factory class that creates Mongo DB based Device Registry specific metrics.
@@ -30,9 +33,12 @@ public class MetricsFactory {
 
     @Singleton
     @Produces
-    MicrometerBasedMongoDbDeviceRegistryMetrics metrics(
+    MongoDbDeviceRegistryMetrics metrics(
             final Vertx vertx,
-            final MeterRegistry registry) {
-        return new MicrometerBasedMongoDbDeviceRegistryMetrics(vertx, registry);
+            final MeterRegistry registry,
+            final MongoClient mongoClient,
+            final MongoDbBasedTenantsConfigProperties tenantServiceProperties) {
+        return new MicrometerBasedMongoDbDeviceRegistryMetrics(vertx, registry, mongoClient,
+                tenantServiceProperties.getCollectionName());
     }
 }
