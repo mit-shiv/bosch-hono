@@ -13,8 +13,7 @@
 
 package org.eclipse.hono.deviceregistry.mongodb;
 
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.eclipse.hono.service.DeviceRegistryMetrics;
 import org.eclipse.hono.service.metric.MicrometerBasedMetrics;
@@ -23,7 +22,6 @@ import org.slf4j.LoggerFactory;
 
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.vertx.core.Future;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.mongo.MongoClient;
@@ -38,6 +36,8 @@ public class MicrometerBasedMongoDbDeviceRegistryMetrics extends MicrometerBased
 
     private final MongoClient mongoClient;
     private final String collectionName;
+
+    private final AtomicInteger tenantsCount;
 
     /**
      * Create a new metrics instance for the Device Registry service.
@@ -54,6 +54,7 @@ public class MicrometerBasedMongoDbDeviceRegistryMetrics extends MicrometerBased
         super(registry, vertx);
         this.mongoClient = mongoClient;
         this.collectionName = collectionName;
+        this.tenantsCount = new AtomicInteger(-1);
     }
 
     @Override
@@ -63,14 +64,11 @@ public class MicrometerBasedMongoDbDeviceRegistryMetrics extends MicrometerBased
 
     private void register() {
         Gauge.builder(TOTAL_TENANTS_METRIC_KEY, () -> {
-            final Future<Long> query = mongoClient.count(collectionName, new JsonObject());
-            try {
-                final long totalTenantsCount = query.toCompletionStage().toCompletableFuture().get();
-                return new AtomicLong(totalTenantsCount);
-            } catch (final InterruptedException | ExecutionException e) {
-                LOG.warn("Error while querying '{}' metric from MongoDB", DeviceRegistryMetrics.TOTAL_TENANTS_METRIC_KEY, e);
-                return -1;
-            }
+            mongoClient.count(collectionName, new JsonObject())
+                    .onSuccess(result -> tenantsCount.set(result.intValue()))
+                    .onFailure(e -> LOG.warn("Error while querying Tenants count from MongoDB",
+                            DeviceRegistryMetrics.TOTAL_TENANTS_METRIC_KEY, e));
+            return tenantsCount.intValue();
         }).register(registry);
     }
 }
