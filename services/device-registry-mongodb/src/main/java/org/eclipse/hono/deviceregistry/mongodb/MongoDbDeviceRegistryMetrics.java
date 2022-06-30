@@ -28,10 +28,6 @@ public interface MongoDbDeviceRegistryMetrics extends DeviceRegistryMetrics {
 
         private Noop() {
         }
-
-        @Override
-        public void registerInitialTenantsCount() {
-        }
     }
 
     /**

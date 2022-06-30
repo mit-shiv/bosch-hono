@@ -84,8 +84,7 @@ public class ManagementServicesProducer {
         return new MongoDbBasedTenantManagementService(
                 vertx,
                 tenantDao,
-                tenantServiceProperties,
-                metrics);
+                tenantServiceProperties);
     }
 
     /**

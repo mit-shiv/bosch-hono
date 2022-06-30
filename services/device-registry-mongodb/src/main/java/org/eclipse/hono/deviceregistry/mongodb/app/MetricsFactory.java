@@ -19,11 +19,10 @@ import javax.inject.Singleton;
 
 import org.eclipse.hono.deviceregistry.mongodb.MicrometerBasedMongoDbDeviceRegistryMetrics;
 import org.eclipse.hono.deviceregistry.mongodb.MongoDbDeviceRegistryMetrics;
-import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedTenantsConfigProperties;
+import org.eclipse.hono.deviceregistry.mongodb.model.TenantDao;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.vertx.core.Vertx;
-import io.vertx.ext.mongo.MongoClient;
 
 /**
  * A factory class that creates Mongo DB based Device Registry specific metrics.
@@ -36,9 +35,7 @@ public class MetricsFactory {
     MongoDbDeviceRegistryMetrics metrics(
             final Vertx vertx,
             final MeterRegistry registry,
-            final MongoClient mongoClient,
-            final MongoDbBasedTenantsConfigProperties tenantServiceProperties) {
-        return new MicrometerBasedMongoDbDeviceRegistryMetrics(vertx, registry, mongoClient,
-                tenantServiceProperties.getCollectionName());
+            final TenantDao dao) {
+        return new MicrometerBasedMongoDbDeviceRegistryMetrics(vertx, registry, dao);
     }
 }

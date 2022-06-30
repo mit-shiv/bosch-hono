@@ -33,19 +33,10 @@ public interface DeviceRegistryMetrics extends Metrics {
 
         private Noop() {
         }
-
-        @Override
-        public void registerInitialTenantsCount() {
-        }
     }
 
     /**
      * The no-op implementation.
      */
     DeviceRegistryMetrics NOOP = new Noop();
-
-    /**
-     * Initiate a registration of gauge metric in {@link MeterRegistry} for the total Tenants count.
-     */
-    void registerInitialTenantsCount();
 }

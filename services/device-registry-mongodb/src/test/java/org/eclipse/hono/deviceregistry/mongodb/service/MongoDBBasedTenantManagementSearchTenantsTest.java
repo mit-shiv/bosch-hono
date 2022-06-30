@@ -14,7 +14,6 @@ package org.eclipse.hono.deviceregistry.mongodb.service;
 
 import java.util.concurrent.TimeUnit;
 
-import org.eclipse.hono.deviceregistry.mongodb.MongoDbDeviceRegistryMetrics;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedTenantsConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.model.MongoDbBasedTenantDao;
 import org.eclipse.hono.service.management.tenant.AbstractTenantManagementSearchTenantsTest;
@@ -59,7 +58,7 @@ public class MongoDBBasedTenantManagementSearchTenantsTest implements AbstractTe
     public void setup(final VertxTestContext testContext) {
         vertx = Vertx.vertx();
         dao = MongoDbTestUtils.getTenantDao(vertx, "hono-search-tenants-test");
-        tenantManagementService = new MongoDbBasedTenantManagementService(vertx, dao, config, MongoDbDeviceRegistryMetrics.NOOP);
+        tenantManagementService = new MongoDbBasedTenantManagementService(vertx, dao, config);
         dao.createIndices().onComplete(testContext.succeedingThenComplete());
     }
 

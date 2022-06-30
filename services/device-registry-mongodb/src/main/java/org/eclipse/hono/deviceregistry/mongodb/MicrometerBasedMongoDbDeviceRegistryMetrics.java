@@ -13,8 +13,10 @@
 
 package org.eclipse.hono.deviceregistry.mongodb;
 
+import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.eclipse.hono.deviceregistry.mongodb.model.TenantDao;
 import org.eclipse.hono.service.DeviceRegistryMetrics;
 import org.eclipse.hono.service.metric.MicrometerBasedMetrics;
 import org.slf4j.Logger;
@@ -24,7 +26,6 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.mongo.MongoClient;
 
 /**
  * Metrics for Mongo DB based Device Registry service.
@@ -34,9 +35,7 @@ public class MicrometerBasedMongoDbDeviceRegistryMetrics extends MicrometerBased
 
     private static final Logger LOG = LoggerFactory.getLogger(MicrometerBasedMongoDbDeviceRegistryMetrics.class);
 
-    private final MongoClient mongoClient;
-    private final String collectionName;
-
+    private final TenantDao dao;
     private final AtomicInteger tenantsCount;
 
     /**
@@ -44,27 +43,21 @@ public class MicrometerBasedMongoDbDeviceRegistryMetrics extends MicrometerBased
      *
      * @param vertx The Vert.x instance to use.
      * @param registry The meter registry to use.
-     * @param mongoClient The client to use for accessing the Mongo DB.
-     * @param collectionName Tenants collection name in Mongo DB.
+     * @param dao The data access object to use for accessing data in the MongoDB.
      *
      * @throws NullPointerException if either parameter is {@code null}.
      */
-    public MicrometerBasedMongoDbDeviceRegistryMetrics(final Vertx vertx, final MeterRegistry registry,
-            final MongoClient mongoClient, final String collectionName) {
+    public MicrometerBasedMongoDbDeviceRegistryMetrics(final Vertx vertx, final MeterRegistry registry, final TenantDao dao) {
         super(registry, vertx);
-        this.mongoClient = mongoClient;
-        this.collectionName = collectionName;
+        Objects.requireNonNull(dao);
+        this.dao = dao;
         this.tenantsCount = new AtomicInteger(-1);
-    }
-
-    @Override
-    public void registerInitialTenantsCount() {
         register();
     }
 
     private void register() {
         Gauge.builder(TOTAL_TENANTS_METRIC_KEY, () -> {
-            mongoClient.count(collectionName, new JsonObject())
+            dao.count(new JsonObject(), null)
                     .onSuccess(result -> tenantsCount.set(result.intValue()))
                     .onFailure(e -> LOG.warn("Error while querying Tenants count from MongoDB",
                             DeviceRegistryMetrics.TOTAL_TENANTS_METRIC_KEY, e));

@@ -20,7 +20,6 @@ import java.net.HttpURLConnection;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
-import org.eclipse.hono.deviceregistry.mongodb.MongoDbDeviceRegistryMetrics;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedTenantsConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.model.MongoDbBasedTenantDao;
 import org.eclipse.hono.deviceregistry.util.Assertions;
@@ -74,7 +73,7 @@ public class MongoDbBasedTenantServiceTest implements AbstractTenantServiceTest 
         vertx = Vertx.vertx();
         dao = MongoDbTestUtils.getTenantDao(vertx, "hono-tenants-test");
         tenantService = new MongoDbBasedTenantService(dao, config);
-        tenantManagementService = new MongoDbBasedTenantManagementService(vertx, dao, config, MongoDbDeviceRegistryMetrics.NOOP);
+        tenantManagementService = new MongoDbBasedTenantManagementService(vertx, dao, config);
         dao.createIndices().onComplete(testContext.succeedingThenComplete());
     }
 

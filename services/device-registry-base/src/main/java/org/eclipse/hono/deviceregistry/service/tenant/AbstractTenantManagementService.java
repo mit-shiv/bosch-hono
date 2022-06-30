@@ -35,7 +35,6 @@ import org.eclipse.hono.service.management.tenant.Tenant;
 import org.eclipse.hono.service.management.tenant.TenantManagementService;
 import org.eclipse.hono.service.management.tenant.TenantWithId;
 import org.eclipse.hono.tracing.TracingHelper;
-import org.eclipse.hono.util.Lifecycle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +47,7 @@ import io.vertx.core.Vertx;
 /**
  * An abstract base class implementation for {@link TenantManagementService}.
  */
-public abstract class AbstractTenantManagementService implements TenantManagementService, Lifecycle {
+public abstract class AbstractTenantManagementService implements TenantManagementService {
 
     protected final Vertx vertx;
 

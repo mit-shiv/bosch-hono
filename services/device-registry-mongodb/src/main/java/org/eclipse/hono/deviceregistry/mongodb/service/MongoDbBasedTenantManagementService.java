@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-import org.eclipse.hono.deviceregistry.mongodb.MongoDbDeviceRegistryMetrics;
 import org.eclipse.hono.deviceregistry.mongodb.config.MongoDbBasedTenantsConfigProperties;
 import org.eclipse.hono.deviceregistry.mongodb.model.TenantDao;
 import org.eclipse.hono.deviceregistry.service.tenant.AbstractTenantManagementService;
@@ -46,7 +45,6 @@ public final class MongoDbBasedTenantManagementService extends AbstractTenantMan
 
     private final TenantDao dao;
     private final MongoDbBasedTenantsConfigProperties config;
-    private final MongoDbDeviceRegistryMetrics metrics;
 
     /**
      * Creates a new service for configuration properties.
@@ -54,33 +52,18 @@ public final class MongoDbBasedTenantManagementService extends AbstractTenantMan
      * @param vertx The vert.x instance to use.
      * @param tenantDao The data access object to use for accessing data in the MongoDB.
      * @param config The properties for configuring this service.
-     * @param metrics Mongo DB Device Registry metrics.
      * @throws NullPointerException if any of the parameters are {@code null}.
      */
     public MongoDbBasedTenantManagementService(
             final Vertx vertx,
             final TenantDao tenantDao,
-            final MongoDbBasedTenantsConfigProperties config, 
-            final MongoDbDeviceRegistryMetrics metrics) {
+            final MongoDbBasedTenantsConfigProperties config) {
         super(vertx);
         Objects.requireNonNull(tenantDao);
         Objects.requireNonNull(config);
-        Objects.requireNonNull(metrics);
 
         this.dao = tenantDao;
         this.config = config;
-        this.metrics = metrics;
-    }
-
-    @Override
-    public Future<Void> start() {
-        metrics.registerInitialTenantsCount();
-        return Future.succeededFuture();
-    }
-
-    @Override
-    public Future<Void> stop() {
-        return Future.succeededFuture();
     }
 
     @Override

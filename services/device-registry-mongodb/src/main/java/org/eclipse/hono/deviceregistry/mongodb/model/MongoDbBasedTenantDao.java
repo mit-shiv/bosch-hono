@@ -382,6 +382,35 @@ public final class MongoDbBasedTenantDao extends MongoDbBasedDao implements Tena
      * {@inheritDoc}
      */
     @Override
+    public Future<Integer> count(final JsonObject filter, final SpanContext tracingContext) {
+
+        final Span span;
+        if (tracingContext != null) {
+            span = tracer.buildSpan("get Tenants count")
+                    .addReference(References.CHILD_OF, tracingContext)
+                    .start();
+        } else {
+            span = null;
+        }
+
+        final Future<Integer> future = mongoClient.count(collectionName, filter == null ? new JsonObject() : filter)
+                .map(count -> count.intValue())
+                .onFailure(e -> {
+                    LOG.error("Error while querying Tenants count from MongoDB", e);
+                    if (tracingContext != null) {
+                        TracingHelper.logError(span, "error getting tenants count", e);
+                    }
+                });
+        if (tracingContext != null) {
+            future.onComplete(r -> span.finish());
+        }
+        return future;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public Future<Void> delete(
             final String tenantId,
             final Optional<String> resourceVersion,
