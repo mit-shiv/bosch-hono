@@ -30,8 +30,12 @@ import io.vertx.core.json.JsonObject;
 /**
  * Metrics for Mongo DB based Device Registry service.
  */
-public class MicrometerBasedMongoDbDeviceRegistryMetrics extends MicrometerBasedMetrics
-        implements MongoDbDeviceRegistryMetrics {
+public class MicrometerBasedMongoDbDeviceRegistryMetrics extends MicrometerBasedMetrics implements DeviceRegistryMetrics {
+
+    /**
+     * Metric key for total number of Tenants in the system.
+     */
+    public static final String TOTAL_TENANTS_METRIC_KEY = "hono.tenants.total";
 
     private static final Logger LOG = LoggerFactory.getLogger(MicrometerBasedMongoDbDeviceRegistryMetrics.class);
 
@@ -59,8 +63,7 @@ public class MicrometerBasedMongoDbDeviceRegistryMetrics extends MicrometerBased
         Gauge.builder(TOTAL_TENANTS_METRIC_KEY, () -> {
             dao.count(new JsonObject(), null)
                     .onSuccess(result -> tenantsCount.set(result.intValue()))
-                    .onFailure(e -> LOG.warn("Error while querying Tenants count from MongoDB",
-                            DeviceRegistryMetrics.TOTAL_TENANTS_METRIC_KEY, e));
+                    .onFailure(e -> LOG.warn("еrror while querying Tenants count from MongoDB", e));
             return tenantsCount.intValue();
         }).register(registry);
     }

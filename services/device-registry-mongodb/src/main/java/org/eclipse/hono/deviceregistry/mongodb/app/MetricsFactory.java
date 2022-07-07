@@ -18,7 +18,6 @@ import javax.enterprise.inject.Produces;
 import javax.inject.Singleton;
 
 import org.eclipse.hono.deviceregistry.mongodb.MicrometerBasedMongoDbDeviceRegistryMetrics;
-import org.eclipse.hono.deviceregistry.mongodb.MongoDbDeviceRegistryMetrics;
 import org.eclipse.hono.deviceregistry.mongodb.model.TenantDao;
 
 import io.micrometer.core.instrument.MeterRegistry;
@@ -32,7 +31,7 @@ public class MetricsFactory {
 
     @Singleton
     @Produces
-    MongoDbDeviceRegistryMetrics metrics(
+    MicrometerBasedMongoDbDeviceRegistryMetrics metrics(
             final Vertx vertx,
             final MeterRegistry registry,
             final TenantDao dao) {

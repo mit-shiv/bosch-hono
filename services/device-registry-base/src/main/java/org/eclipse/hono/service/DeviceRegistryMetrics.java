@@ -21,10 +21,6 @@ import org.eclipse.hono.service.metric.NoopBasedMetrics;
  */
 public interface DeviceRegistryMetrics extends Metrics {
 
-    /**
-     * Metric key for total number of Tenants in the system.
-     */
-    String TOTAL_TENANTS_METRIC_KEY = "total.tenants";
 
     /**
      * A no-op implementation for this specific metrics type.
