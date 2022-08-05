@@ -92,7 +92,7 @@ public class HonoBasicAuthHandler extends HTTPAuthorizationHandler<Authenticatio
 
             try {
                 // decode the payload
-                final String decoded = new String(Base64.getDecoder().decode(parseAuthorization.result()));
+                final String decoded = new String(Base64.getDecoder().decode(parseAuthorization.result()), Charset.defaultCharset());
 
                 final int colonIdx = decoded.indexOf(":");
                 if (colonIdx != -1) {
